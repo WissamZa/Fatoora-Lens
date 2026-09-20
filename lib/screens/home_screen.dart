@@ -1,0 +1,344 @@
+import 'dart:convert';
+
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
+
+import '../data/database_service.dart';
+import '../l10n.dart';
+import '../models/invoice.dart';
+import '../models/shop.dart';
+import '../services/export_service.dart';
+import '../services/zatca_qr_parser.dart';
+import '../widgets/invoice_editor.dart';
+import '../widgets/invoice_tile.dart';
+import 'analysis_screen.dart';
+import 'pdf_export_screen.dart';
+import 'scanner_screen.dart';
+import 'settings_screen.dart';
+import 'shops_screen.dart';
+
+class HomeScreen extends StatefulWidget {
+  const HomeScreen({
+    required this.database,
+    required this.darkMode,
+    required this.onToggleTheme,
+    required this.onToggleLanguage,
+    super.key,
+  });
+
+  final DatabaseService database;
+  final bool darkMode;
+  final VoidCallback onToggleTheme;
+  final VoidCallback onToggleLanguage;
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  final ImagePicker _imagePicker = ImagePicker();
+  final TextEditingController _searchController = TextEditingController();
+  List<Invoice> _invoices = const [];
+  List<Shop> _shops = const [];
+  int _tabIndex = 0;
+  bool _loading = true;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadData() async {
+    final invoices = await widget.database.getInvoices();
+    final shops = await widget.database.getShops();
+    if (!mounted) return;
+    setState(() {
+      _invoices = invoices;
+      _shops = shops;
+      _loading = false;
+    });
+  }
+
+  Future<void> _scanCamera() async {
+    final payload = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => const ScannerScreen()),
+    );
+    if (payload != null) await _parseAndSave(payload);
+  }
+
+  Future<void> _scanImage() async {
+    final english = AppL10n.isEnglish(context);
+    final image = await _imagePicker.pickImage(source: ImageSource.gallery);
+    if (image == null) return;
+    setState(() => _busy = true);
+    final controller = MobileScannerController(autoStart: false);
+    try {
+      final capture = await controller.analyzeImage(image.path, formats: [BarcodeFormat.qrCode]);
+      final payload = capture?.barcodes.map((barcode) => barcode.rawValue).whereType<String>().firstOrNull;
+      if (payload == null || payload.isEmpty) {
+        _message(english ? 'No QR code found in the image.' : 'لم يتم العثور على QR في الصورة.');
+      } else {
+        await _parseAndSave(payload);
+      }
+    } on UnsupportedError {
+      _message(english ? 'Image analysis is not supported here.' : 'قراءة الصور غير مدعومة على هذا الجهاز.');
+    } catch (error) {
+      _message('${english ? 'Error' : 'حدث خطأ'}: $error');
+    } finally {
+      await controller.dispose();
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _parseAndSave(String payload) async {
+    final english = AppL10n.isEnglish(context);
+    try {
+      final parsed = ZatcaQrParser.parse(payload);
+      final invoice = await showInvoiceEditor(context, parsed, review: true);
+      if (invoice == null) return;
+      await widget.database.insertInvoice(invoice);
+      await _loadData();
+      _message('${english ? 'Saved' : 'تم الحفظ'}: ${invoice.sellerName}');
+    } on FormatException catch (error) {
+      _message(error.message);
+    } catch (error) {
+      _message('${english ? 'Error' : 'حدث خطأ'}: $error');
+    }
+  }
+
+  Future<void> _editInvoice(Invoice invoice) async {
+    final savedText = tr(context, 'saved');
+    final updated = await showInvoiceEditor(context, invoice);
+    if (updated == null) return;
+    await widget.database.updateInvoice(updated);
+    await _loadData();
+    _message(savedText);
+  }
+
+  Future<void> _deleteInvoice(Invoice invoice) async {
+    final deletedText = tr(context, 'deleted');
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(tr(context, 'deleteInvoice')),
+        content: Text(tr(context, 'deleteConfirm')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(tr(context, 'cancel'))),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(tr(context, 'delete'))),
+        ],
+      ),
+    );
+    if (confirmed != true || invoice.id == null) return;
+    await widget.database.deleteInvoice(invoice.id!);
+    await _loadData();
+    _message(deletedText);
+  }
+
+  Future<void> _exportCsv() async {
+    if (_invoices.isEmpty) return _message(tr(context, 'noInvoices'));
+    final english = AppL10n.isEnglish(context);
+    await _runBusy(() => ExportService.shareCsv(_invoices, english: english));
+  }
+
+  Future<void> _createBackup() async {
+    final english = AppL10n.isEnglish(context);
+    await _runBusy(() async {
+      final backup = await widget.database.createBackupJson();
+      await ExportService.shareBackup(backup, english: english);
+    });
+  }
+
+  Future<void> _restoreBackup() async {
+    final errorText = tr(context, 'error');
+    final savedText = tr(context, 'saved');
+    try {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(tr(context, 'restore')),
+          content: Text(AppL10n.isEnglish(context) ? 'Restoring will replace current local data.' : 'الاسترداد سيستبدل البيانات المحلية الحالية.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false), child: Text(tr(context, 'cancel'))),
+            FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(tr(context, 'restore'))),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+      final file = await FilePicker.pickFile(
+        type: FileType.custom,
+        allowedExtensions: ['json'],
+      );
+      if (file == null) return;
+      final bytes = await file.readAsBytes();
+      await widget.database.restoreBackupJson(utf8.decode(bytes));
+      await _loadData();
+      _message(savedText);
+    } catch (error) {
+      _message('$errorText: $error');
+    }
+  }
+
+  Future<void> _createPdf() async {
+    if (_invoices.isEmpty) return _message(tr(context, 'noInvoices'));
+    final english = AppL10n.isEnglish(context);
+    final selected = await Navigator.of(context).push<List<Invoice>>(
+      MaterialPageRoute(builder: (_) => PdfExportScreen(invoices: _invoices)),
+    );
+    if (selected == null || selected.isEmpty) return;
+    await _runBusy(() => ExportService.sharePdf(selected, english: english));
+  }
+
+  Future<void> _runBusy(Future<void> Function() action) async {
+    final errorText = tr(context, 'error');
+    setState(() => _busy = true);
+    try {
+      await action();
+    } catch (error) {
+      _message('$errorText: $error');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  void _message(String text) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(text)));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final pages = [
+      _buildHomeTab(),
+      ShopsTab(database: widget.database, shops: _shops, onChanged: _loadData),
+      AnalysisTab(shops: _shops),
+      SettingsTab(
+        darkMode: widget.darkMode,
+        onToggleTheme: widget.onToggleTheme,
+        onToggleLanguage: widget.onToggleLanguage,
+        onExportCsv: _exportCsv,
+        onBackup: _createBackup,
+        onRestore: _restoreBackup,
+        onPdf: _createPdf,
+      ),
+    ];
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(_tabIndex == 0 ? tr(context, 'appTitle') : [tr(context, 'shops'), tr(context, 'analysis'), tr(context, 'settings')][_tabIndex - 1]),
+        actions: [
+          if (_busy) const Padding(padding: EdgeInsets.symmetric(horizontal: 16), child: Center(child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))))
+          else if (_tabIndex == 0)
+            IconButton(onPressed: _exportCsv, tooltip: tr(context, 'exportCsv'), icon: const Icon(Icons.file_download_outlined)),
+        ],
+      ),
+      body: _loading ? const Center(child: CircularProgressIndicator()) : pages[_tabIndex],
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _tabIndex,
+        onDestinationSelected: (index) => setState(() => _tabIndex = index),
+        destinations: [
+          NavigationDestination(icon: const Icon(Icons.home_outlined), selectedIcon: const Icon(Icons.home_rounded), label: tr(context, 'home')),
+          NavigationDestination(icon: const Icon(Icons.store_outlined), selectedIcon: const Icon(Icons.store_rounded), label: tr(context, 'shops')),
+          NavigationDestination(icon: const Icon(Icons.insights_outlined), selectedIcon: const Icon(Icons.insights_rounded), label: tr(context, 'analysis')),
+          NavigationDestination(icon: const Icon(Icons.settings_outlined), selectedIcon: const Icon(Icons.settings_rounded), label: tr(context, 'settings')),
+        ],
+      ),
+      floatingActionButton: _tabIndex == 0
+          ? FloatingActionButton.extended(onPressed: _busy ? null : _scanCamera, icon: const Icon(Icons.qr_code_scanner_rounded), label: Text(tr(context, 'scan')))
+          : null,
+    );
+  }
+
+  Widget _buildHomeTab() {
+    final query = _searchController.text.trim().toLowerCase();
+    final filtered = _invoices.where((invoice) {
+      if (query.isEmpty) return true;
+      return invoice.sellerName.toLowerCase().contains(query) || invoice.vatNumber.toLowerCase().contains(query);
+    }).toList();
+    final shown = query.isEmpty ? filtered.take(5).toList() : filtered;
+    final total = _invoices.fold<double>(0, (sum, item) => sum + item.totalAmount);
+    final tax = _invoices.fold<double>(0, (sum, item) => sum + item.vatAmount);
+    final currency = AppL10n.isEnglish(context) ? 'SAR' : 'ر.س';
+
+    return RefreshIndicator(
+      onRefresh: _loadData,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+        children: [
+          _buildIntro(),
+          const SizedBox(height: 14),
+          Row(children: [
+            Expanded(child: FilledButton.icon(onPressed: _busy ? null : _scanCamera, icon: const Icon(Icons.camera_alt_outlined), label: Text(tr(context, 'camera')), style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 15)))),
+            const SizedBox(width: 10),
+            Expanded(child: OutlinedButton.icon(onPressed: _busy ? null : _scanImage, icon: const Icon(Icons.photo_library_outlined), label: Text(tr(context, 'fromImage')), style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 15)))),
+          ]),
+          const SizedBox(height: 14),
+          TextField(controller: _searchController, onChanged: (_) => setState(() {}), decoration: InputDecoration(prefixIcon: const Icon(Icons.search_rounded), hintText: tr(context, 'search'), suffixIcon: _searchController.text.isEmpty ? null : IconButton(onPressed: () { _searchController.clear(); setState(() {}); }, icon: const Icon(Icons.clear_rounded)))),
+          const SizedBox(height: 14),
+          Row(children: [
+            Expanded(child: _Summary(label: tr(context, 'totalInvoices'), value: '${_invoices.length}', icon: Icons.receipt_long_outlined)),
+            const SizedBox(width: 8),
+            Expanded(child: _Summary(label: tr(context, 'totalAmount'), value: '${total.toStringAsFixed(2)} $currency', icon: Icons.payments_outlined)),
+            const SizedBox(width: 8),
+            Expanded(child: _Summary(label: tr(context, 'totalTax'), value: '${tax.toStringAsFixed(2)} $currency', icon: Icons.account_balance_wallet_outlined)),
+          ]),
+          const SizedBox(height: 22),
+          Text(query.isEmpty ? tr(context, 'latestInvoices') : tr(context, 'allInvoices'), style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+          const SizedBox(height: 10),
+          if (shown.isEmpty)
+            Padding(padding: const EdgeInsets.symmetric(vertical: 40), child: Center(child: Text(query.isEmpty ? tr(context, 'noInvoices') : tr(context, 'noSearchResults'))))
+          else
+            ...shown.map((invoice) => InvoiceTile(invoice: invoice, onEdit: () => _editInvoice(invoice), onDelete: () => _deleteInvoice(invoice))),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildIntro() => Card(
+        clipBehavior: Clip.antiAlias,
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: const BoxDecoration(gradient: LinearGradient(colors: [Color(0xFF0A7A67), Color(0xFF159E83)], begin: Alignment.topRight, end: Alignment.bottomLeft)),
+          child: Row(children: [
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(tr(context, 'scanNow'), style: const TextStyle(color: Colors.white, fontSize: 21, fontWeight: FontWeight.w800)), const SizedBox(height: 5), Text(tr(context, 'scanHint'), style: const TextStyle(color: Colors.white70, height: 1.35))])),
+            Icon(Icons.receipt_long_rounded, size: 62, color: Colors.white.withValues(alpha: 0.9)),
+          ]),
+        ),
+      );
+}
+
+class _Summary extends StatelessWidget {
+  const _Summary({required this.label, required this.value, required this.icon});
+
+  final String label;
+  final String value;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) => Card(
+        child: Padding(
+          padding: const EdgeInsets.all(11),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Icon(icon, size: 20, color: Theme.of(context).colorScheme.primary), const SizedBox(height: 7), Text(label, style: Theme.of(context).textTheme.bodySmall, maxLines: 1, overflow: TextOverflow.ellipsis), const SizedBox(height: 3), Text(value, style: const TextStyle(fontWeight: FontWeight.w800), maxLines: 1, overflow: TextOverflow.ellipsis)]),
+        ),
+      );
+}
+
+extension on Iterable<String?> {
+  String? get firstOrNull {
+    for (final item in this) {
+      if (item != null) return item;
+    }
+    return null;
+  }
+}

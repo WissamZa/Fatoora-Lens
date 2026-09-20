@@ -1,0 +1,63 @@
+name: Release Android APK
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag, for example v1.0.0'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    name: Build split APKs and publish release
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build release APKs
+        run: >-
+          flutter build apk --release
+          --split-per-abi
+          --tree-shake-icons
+          --obfuscate
+          --split-debug-info=build/symbols
+
+      - name: Publish GitHub Release with gh CLI
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          gh release create "$RELEASE_TAG" \
+            build/app/outputs/flutter-apk/*.apk \
+            --title "Zakat Invoice Scanner $RELEASE_TAG" \
+            --generate-notes
+
+      - name: Upload symbols as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-symbols-${{ github.ref_name }}
+          path: build/symbols
