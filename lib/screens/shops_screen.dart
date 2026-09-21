@@ -5,6 +5,7 @@ import '../l10n.dart';
 import '../models/shop.dart';
 import '../widgets/invoice_tile.dart';
 import '../widgets/invoice_editor.dart';
+import '../widgets/sar_symbol.dart';
 
 class ShopsTab extends StatelessWidget {
   const ShopsTab({required this.database, required this.shops, required this.onChanged, super.key});
@@ -18,7 +19,6 @@ class ShopsTab extends StatelessWidget {
     if (shops.isEmpty) {
       return Center(child: Text(tr(context, 'noInvoices')));
     }
-    final currency = AppL10n.isEnglish(context) ? 'SAR' : 'ر.س';
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 100),
       itemCount: shops.length,
@@ -40,7 +40,16 @@ class ShopsTab extends StatelessWidget {
                 if (shop.vatNumber.isNotEmpty)
                   Text('${tr(context, 'vatNumber')}: ${shop.vatNumber}', style: Theme.of(context).textTheme.bodySmall),
                 const SizedBox(height: 4),
-                Text('${shop.invoices.length} ${shop.invoices.length == 1 ? tr(context, 'invoice') : tr(context, 'invoices')}  •  ${shop.totalAmount.toStringAsFixed(2)} $currency'),
+                Row(
+                  children: [
+                    Text('${shop.invoices.length} ${shop.invoices.length == 1 ? tr(context, 'invoice') : tr(context, 'invoices')}  •  '),
+                    SarAmount(
+                      amount: shop.totalAmount,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
+                      symbolSize: 12,
+                    ),
+                  ],
+                ),
                 if (shop.note.isNotEmpty)
                   Text('${tr(context, 'note')}: ${shop.note}', maxLines: 1, overflow: TextOverflow.ellipsis),
               ],
@@ -133,7 +142,6 @@ class _ShopDetailsScreenState extends State<ShopDetailsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final currency = AppL10n.isEnglish(context) ? 'SAR' : 'ر.س';
     return Scaffold(
       appBar: AppBar(title: Text(_shop.name)),
       body: ListView(
@@ -152,8 +160,8 @@ class _ShopDetailsScreenState extends State<ShopDetailsScreen> {
                   Row(
                     children: [
                       Expanded(child: _Stat(label: tr(context, 'invoices'), value: '${_shop.invoices.length}')),
-                      Expanded(child: _Stat(label: tr(context, 'shopTotal'), value: '${_shop.totalAmount.toStringAsFixed(2)} $currency')),
-                      Expanded(child: _Stat(label: tr(context, 'tax'), value: '${_shop.totalTax.toStringAsFixed(2)} $currency')),
+                      Expanded(child: _Stat(label: tr(context, 'shopTotal'), amount: _shop.totalAmount)),
+                      Expanded(child: _Stat(label: tr(context, 'tax'), amount: _shop.totalTax)),
                     ],
                   ),
                   const SizedBox(height: 10),
@@ -183,10 +191,15 @@ class _ShopDetailsScreenState extends State<ShopDetailsScreen> {
 }
 
 class _Stat extends StatelessWidget {
-  const _Stat({required this.label, required this.value});
+  const _Stat({
+    required this.label,
+    this.value,
+    this.amount,
+  });
 
   final String label;
-  final String value;
+  final String? value;
+  final double? amount;
 
   @override
   Widget build(BuildContext context) => Column(
@@ -194,7 +207,14 @@ class _Stat extends StatelessWidget {
         children: [
           Text(label, style: Theme.of(context).textTheme.bodySmall),
           const SizedBox(height: 3),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.w800)),
+          if (amount != null)
+            SarAmount(
+              amount: amount!,
+              style: const TextStyle(fontWeight: FontWeight.w800),
+              symbolSize: 12,
+            )
+          else
+            Text(value ?? '', style: const TextStyle(fontWeight: FontWeight.w800)),
         ],
       );
 }

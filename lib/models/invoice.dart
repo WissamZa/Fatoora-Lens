@@ -8,6 +8,7 @@ class Invoice {
     required this.vatAmount,
     required this.rawPayload,
     this.note = '',
+    this.imagePath,
     this.createdAt,
   });
 
@@ -19,6 +20,7 @@ class Invoice {
   final double vatAmount;
   final String rawPayload;
   final String note;
+  final String? imagePath;
   final DateTime? createdAt;
 
   Invoice copyWith({
@@ -27,6 +29,8 @@ class Invoice {
     double? totalAmount,
     double? vatAmount,
     String? note,
+    String? imagePath,
+    bool clearImage = false,
   }) => Invoice(
         id: id,
         sellerName: sellerName ?? this.sellerName,
@@ -36,6 +40,7 @@ class Invoice {
         vatAmount: vatAmount ?? this.vatAmount,
         rawPayload: rawPayload,
         note: note ?? this.note,
+        imagePath: clearImage ? null : (imagePath ?? this.imagePath),
         createdAt: createdAt,
       );
 
@@ -48,6 +53,7 @@ class Invoice {
         'vat_amount': vatAmount,
         'raw_payload': rawPayload,
         'note': note,
+        'image_path': imagePath,
         'created_at': (createdAt ?? DateTime.now()).toIso8601String(),
       };
 
@@ -60,6 +66,7 @@ class Invoice {
         vatAmount: (map['vat_amount'] as num).toDouble(),
         rawPayload: map['raw_payload'] as String,
         note: (map['note'] as String?) ?? '',
+        imagePath: map['image_path'] as String?,
         createdAt: DateTime.tryParse(map['created_at'] as String? ?? ''),
       );
 }

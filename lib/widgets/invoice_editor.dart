@@ -1,8 +1,13 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../l10n.dart';
 import '../models/invoice.dart';
 import '../services/zatca_qr_parser.dart';
+import 'sar_symbol.dart';
 
 Future<Invoice?> showInvoiceEditor(
   BuildContext context,
@@ -31,6 +36,7 @@ class _InvoiceEditorDialogState extends State<_InvoiceEditorDialog> {
   late final TextEditingController _amountController;
   late final TextEditingController _taxController;
   late final TextEditingController _noteController;
+  String? _imagePath;
 
   @override
   void initState() {
@@ -41,6 +47,7 @@ class _InvoiceEditorDialogState extends State<_InvoiceEditorDialog> {
     _amountController = TextEditingController(text: invoice.totalAmount.toStringAsFixed(2));
     _taxController = TextEditingController(text: invoice.vatAmount.toStringAsFixed(2));
     _noteController = TextEditingController(text: invoice.note);
+    _imagePath = invoice.imagePath;
   }
 
   @override
@@ -51,6 +58,107 @@ class _InvoiceEditorDialogState extends State<_InvoiceEditorDialog> {
     _taxController.dispose();
     _noteController.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickImage(ImageSource source) async {
+    try {
+      final picker = ImagePicker();
+      final picked = await picker.pickImage(source: source, imageQuality: 85);
+      if (picked == null) return;
+
+      final docDir = await getApplicationDocumentsDirectory();
+      final imagesDir = Directory('${docDir.path}/invoice_images');
+      if (!await imagesDir.exists()) {
+        await imagesDir.create(recursive: true);
+      }
+      final filename = 'invoice_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final savedFile = await File(picked.path).copy('${imagesDir.path}/$filename');
+
+      if (!mounted) return;
+      setState(() {
+        _imagePath = savedFile.path;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${tr(context, 'error')}: $e')),
+      );
+    }
+  }
+
+  Future<void> _showImageSourcePicker() async {
+    showModalBottomSheet<void>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                tr(context, 'invoiceImage'),
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              const SizedBox(height: 12),
+              ListTile(
+                leading: const Icon(Icons.camera_alt_outlined),
+                title: Text(tr(context, 'takePhoto')),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _pickImage(ImageSource.camera);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library_outlined),
+                title: Text(tr(context, 'chooseFromGallery')),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _pickImage(ImageSource.gallery);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _viewFullImage(String path) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.black87,
+        insetPadding: const EdgeInsets.all(12),
+        child: Stack(
+          alignment: Alignment.topRight,
+          children: [
+            Center(
+              child: InteractiveViewer(
+                clipBehavior: Clip.none,
+                minScale: 0.5,
+                maxScale: 4.0,
+                child: Image.file(
+                  File(path),
+                  fit: BoxFit.contain,
+                ),
+              ),
+            ),
+            Positioned(
+              top: 8,
+              right: 8,
+              child: IconButton(
+                style: IconButton.styleFrom(backgroundColor: Colors.black54),
+                icon: const Icon(Icons.close, color: Colors.white),
+                onPressed: () => Navigator.pop(ctx),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _save() {
@@ -71,26 +179,38 @@ class _InvoiceEditorDialogState extends State<_InvoiceEditorDialog> {
         totalAmount: amount,
         vatAmount: tax,
         note: _noteController.text.trim(),
+        imagePath: _imagePath,
+        clearImage: _imagePath == null,
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final hasImage = _imagePath != null && _imagePath!.isNotEmpty && File(_imagePath!).existsSync();
+
     return AlertDialog(
       title: Text(tr(context, widget.review ? 'invoiceData' : 'editInvoice')),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             TextField(
               controller: _sellerController,
-              decoration: InputDecoration(labelText: tr(context, 'shop')),
+              decoration: InputDecoration(
+                labelText: tr(context, 'shop'),
+                prefixIcon: const Icon(Icons.storefront_outlined),
+              ),
             ),
             const SizedBox(height: 10),
             TextField(
               controller: _vatController,
-              decoration: InputDecoration(labelText: tr(context, 'vatNumber')),
+              decoration: InputDecoration(
+                labelText: tr(context, 'vatNumber'),
+                prefixIcon: const Icon(Icons.pin_outlined),
+              ),
               keyboardType: TextInputType.number,
             ),
             const SizedBox(height: 10),
@@ -99,7 +219,13 @@ class _InvoiceEditorDialogState extends State<_InvoiceEditorDialog> {
                 Expanded(
                   child: TextField(
                     controller: _amountController,
-                    decoration: InputDecoration(labelText: tr(context, 'amount')),
+                    decoration: InputDecoration(
+                      labelText: tr(context, 'amount'),
+                      prefixIcon: const Padding(
+                        padding: EdgeInsets.all(12),
+                        child: SarSymbol(size: 16),
+                      ),
+                    ),
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   ),
                 ),
@@ -107,7 +233,13 @@ class _InvoiceEditorDialogState extends State<_InvoiceEditorDialog> {
                 Expanded(
                   child: TextField(
                     controller: _taxController,
-                    decoration: InputDecoration(labelText: tr(context, 'tax')),
+                    decoration: InputDecoration(
+                      labelText: tr(context, 'tax'),
+                      prefixIcon: const Padding(
+                        padding: EdgeInsets.all(12),
+                        child: SarSymbol(size: 16),
+                      ),
+                    ),
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   ),
                 ),
@@ -119,15 +251,121 @@ class _InvoiceEditorDialogState extends State<_InvoiceEditorDialog> {
               maxLines: 2,
               decoration: InputDecoration(
                 labelText: tr(context, 'note'),
+                prefixIcon: const Icon(Icons.edit_note_outlined),
                 alignLabelWithHint: true,
               ),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 14),
+            // Invoice Image section
+            Text(
+              tr(context, 'invoiceImage'),
+              style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            if (hasImage) ...[
+              Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: theme.colorScheme.outlineVariant),
+                ),
+                padding: const EdgeInsets.all(8),
+                child: Row(
+                  children: [
+                    GestureDetector(
+                      onTap: () => _viewFullImage(_imagePath!),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            Image.file(
+                              File(_imagePath!),
+                              width: 64,
+                              height: 64,
+                              fit: BoxFit.cover,
+                            ),
+                            Container(
+                              width: 64,
+                              height: 64,
+                              color: Colors.black26,
+                              child: const Icon(Icons.zoom_in_rounded, color: Colors.white, size: 22),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            tr(context, 'hasImage'),
+                            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                          ),
+                          const SizedBox(height: 4),
+                          Wrap(
+                            spacing: 8,
+                            children: [
+                              InkWell(
+                                onTap: _showImageSourcePicker,
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 4),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.edit_outlined, size: 14, color: theme.colorScheme.primary),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        tr(context, 'changeImage'),
+                                        style: TextStyle(color: theme.colorScheme.primary, fontSize: 12, fontWeight: FontWeight.w600),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              InkWell(
+                                onTap: () => setState(() => _imagePath = null),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 4),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.delete_outline_rounded, size: 14, color: theme.colorScheme.error),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        tr(context, 'removeImage'),
+                                        style: TextStyle(color: theme.colorScheme.error, fontSize: 12, fontWeight: FontWeight.w600),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ] else ...[
+              OutlinedButton.icon(
+                onPressed: _showImageSourcePicker,
+                icon: const Icon(Icons.add_a_photo_outlined, size: 20),
+                label: Text(tr(context, 'addImage')),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ],
+            const SizedBox(height: 14),
             Align(
               alignment: AlignmentDirectional.centerStart,
               child: Text(
                 '${tr(context, 'date')}: ${ZatcaQrParser.formatDate(widget.invoice.issuedAt)}  •  ${ZatcaQrParser.formatTime(widget.invoice.issuedAt)}',
-                style: Theme.of(context).textTheme.bodySmall,
+                style: theme.textTheme.bodySmall,
               ),
             ),
           ],

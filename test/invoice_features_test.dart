@@ -1,0 +1,107 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:fatoora_lens/models/invoice.dart';
+import 'package:fatoora_lens/widgets/invoice_tile.dart';
+import 'package:fatoora_lens/widgets/sar_symbol.dart';
+
+void main() {
+  group('Invoice Model with imagePath', () {
+    test('supports imagePath serialization and deserialization', () {
+      final invoice = Invoice(
+        id: 1,
+        sellerName: 'سوبرماركت النخيل',
+        vatNumber: '300000000000003',
+        issuedAt: DateTime(2026, 3, 15, 14, 30),
+        totalAmount: 115.00,
+        vatAmount: 15.00,
+        rawPayload: 'test-payload',
+        note: 'ملاحظة تجريبية',
+        imagePath: '/data/user/0/com.fatooralens.app/invoices/inv_1.jpg',
+      );
+
+      final map = invoice.toMap();
+      expect(map['image_path'], '/data/user/0/com.fatooralens.app/invoices/inv_1.jpg');
+
+      final fromMap = Invoice.fromMap(map);
+      expect(fromMap.imagePath, '/data/user/0/com.fatooralens.app/invoices/inv_1.jpg');
+      expect(fromMap.sellerName, 'سوبرماركت النخيل');
+      expect(fromMap.totalAmount, 115.00);
+      expect(fromMap.vatAmount, 15.00);
+
+      // copyWith new image
+      final updated = invoice.copyWith(imagePath: '/new/path/image.jpg');
+      expect(updated.imagePath, '/new/path/image.jpg');
+
+      // copyWith clear image
+      final cleared = invoice.copyWith(clearImage: true);
+      expect(cleared.imagePath, isNull);
+    });
+  });
+
+  group('SAR Symbol and Amount Widgets', () {
+    testWidgets('renders SarSymbol and SarAmount without crashing', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: Column(
+                children: [
+                  SarSymbol(size: 20),
+                  SarAmount(amount: 250.75),
+                  SarTaxBadge(amount: 37.61),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+      expect(find.byType(SarSymbol), findsWidgets);
+      expect(find.text('250.75'), findsOneWidget);
+      expect(find.text('37.61'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('InvoiceTile Widget', () {
+    testWidgets('renders invoice tile with SAR amount and tax badge', (tester) async {
+      final invoice = Invoice(
+        id: 42,
+        sellerName: 'شركة تجريبية',
+        vatNumber: '310123456700003',
+        issuedAt: DateTime(2026, 5, 10, 10, 0),
+        totalAmount: 575.0,
+        vatAmount: 75.0,
+        rawPayload: 'payload',
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('ar'),
+          supportedLocales: const [Locale('ar'), Locale('en')],
+          localizationsDelegates: const [
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: Scaffold(
+            body: InvoiceTile(
+              invoice: invoice,
+              onEdit: () {},
+              onDelete: () {},
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+      expect(find.text('شركة تجريبية'), findsOneWidget);
+      expect(find.text('575.00'), findsOneWidget);
+      expect(find.byType(SarTaxBadge), findsOneWidget);
+      expect(find.byType(SarSymbol), findsWidgets);
+      expect(tester.takeException(), isNull);
+    });
+  });
+}

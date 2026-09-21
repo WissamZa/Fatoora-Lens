@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../l10n.dart';
 import '../models/shop.dart';
+import '../widgets/sar_symbol.dart';
 
 class AnalysisTab extends StatelessWidget {
   const AnalysisTab({required this.shops, super.key});
@@ -22,7 +23,6 @@ class AnalysisTab extends StatelessWidget {
     final tax = shops.fold<double>(0, (sum, shop) => sum + shop.totalTax);
     final count = shops.fold<int>(0, (sum, shop) => sum + shop.invoices.length);
     final max = chartShops.fold<double>(0, (value, shop) => math.max(value, shop.totalAmount));
-    final currency = AppL10n.isEnglish(context) ? 'SAR' : 'ر.س';
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 100),
@@ -31,9 +31,9 @@ class AnalysisTab extends StatelessWidget {
         const SizedBox(height: 14),
         Row(
           children: [
-            Expanded(child: _Metric(label: tr(context, 'allShopsTotal'), value: '${total.toStringAsFixed(2)} $currency', icon: Icons.payments_outlined)),
+            Expanded(child: _Metric(label: tr(context, 'allShopsTotal'), amount: total, icon: Icons.payments_outlined)),
             const SizedBox(width: 10),
-            Expanded(child: _Metric(label: tr(context, 'totalTax'), value: '${tax.toStringAsFixed(2)} $currency', icon: Icons.receipt_long_outlined)),
+            Expanded(child: _Metric(label: tr(context, 'totalTax'), amount: tax, icon: Icons.receipt_long_outlined)),
           ],
         ),
         const SizedBox(height: 10),
@@ -108,7 +108,7 @@ class AnalysisTab extends StatelessWidget {
               children: [
                 Text(tr(context, 'summary'), style: const TextStyle(fontWeight: FontWeight.w800)),
                 const SizedBox(height: 16),
-                ...ordered.map((shop) => _ShopProgress(shop: shop, total: total, currency: currency)),
+                ...ordered.map((shop) => _ShopProgress(shop: shop, total: total)),
               ],
             ),
           ),
@@ -119,10 +119,16 @@ class AnalysisTab extends StatelessWidget {
 }
 
 class _Metric extends StatelessWidget {
-  const _Metric({required this.label, required this.value, required this.icon});
+  const _Metric({
+    required this.label,
+    this.value,
+    this.amount,
+    required this.icon,
+  });
 
   final String label;
-  final String value;
+  final String? value;
+  final double? amount;
   final IconData icon;
 
   @override
@@ -133,7 +139,23 @@ class _Metric extends StatelessWidget {
             children: [
               Icon(icon, color: Theme.of(context).colorScheme.primary),
               const SizedBox(width: 10),
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(label, style: Theme.of(context).textTheme.bodySmall), const SizedBox(height: 3), Text(value, style: const TextStyle(fontWeight: FontWeight.w800))])),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(label, style: Theme.of(context).textTheme.bodySmall),
+                    const SizedBox(height: 3),
+                    if (amount != null)
+                      SarAmount(
+                        amount: amount!,
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                        symbolSize: 13,
+                      )
+                    else
+                      Text(value ?? '', style: const TextStyle(fontWeight: FontWeight.w800)),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
@@ -141,11 +163,10 @@ class _Metric extends StatelessWidget {
 }
 
 class _ShopProgress extends StatelessWidget {
-  const _ShopProgress({required this.shop, required this.total, required this.currency});
+  const _ShopProgress({required this.shop, required this.total});
 
   final Shop shop;
   final double total;
-  final String currency;
 
   @override
   Widget build(BuildContext context) {
@@ -154,7 +175,16 @@ class _ShopProgress extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 14),
       child: Column(
         children: [
-          Row(children: [Expanded(child: Text(shop.name, maxLines: 1, overflow: TextOverflow.ellipsis)), Text('${shop.totalAmount.toStringAsFixed(2)} $currency', style: const TextStyle(fontWeight: FontWeight.w700))]),
+          Row(
+            children: [
+              Expanded(child: Text(shop.name, maxLines: 1, overflow: TextOverflow.ellipsis)),
+              SarAmount(
+                amount: shop.totalAmount,
+                style: const TextStyle(fontWeight: FontWeight.w700),
+                symbolSize: 12,
+              ),
+            ],
+          ),
           const SizedBox(height: 6),
           ClipRRect(borderRadius: BorderRadius.circular(8), child: LinearProgressIndicator(value: ratio, minHeight: 8)),
         ],

@@ -13,6 +13,7 @@ import '../services/export_service.dart';
 import '../services/zatca_qr_parser.dart';
 import '../widgets/invoice_editor.dart';
 import '../widgets/invoice_tile.dart';
+import '../widgets/sar_symbol.dart';
 import 'analysis_screen.dart';
 import 'pdf_export_screen.dart';
 import 'scanner_screen.dart';
@@ -282,7 +283,6 @@ class _HomeScreenState extends State<HomeScreen> {
     final shown = query.isEmpty ? filtered.take(5).toList() : filtered;
     final total = _invoices.fold<double>(0, (sum, item) => sum + item.totalAmount);
     final tax = _invoices.fold<double>(0, (sum, item) => sum + item.vatAmount);
-    final currency = AppL10n.isEnglish(context) ? 'SAR' : 'ر.س';
 
     return RefreshIndicator(
       onRefresh: _loadData,
@@ -303,9 +303,9 @@ class _HomeScreenState extends State<HomeScreen> {
           Row(children: [
             Expanded(child: _Summary(label: tr(context, 'totalInvoices'), value: '${_invoices.length}', icon: Icons.receipt_long_outlined)),
             const SizedBox(width: 8),
-            Expanded(child: _Summary(label: tr(context, 'totalAmount'), value: '${total.toStringAsFixed(2)} $currency', icon: Icons.payments_outlined)),
+            Expanded(child: _Summary(label: tr(context, 'totalAmount'), amount: total, icon: Icons.payments_outlined)),
             const SizedBox(width: 8),
-            Expanded(child: _Summary(label: tr(context, 'totalTax'), value: '${tax.toStringAsFixed(2)} $currency', icon: Icons.account_balance_wallet_outlined)),
+            Expanded(child: _Summary(label: tr(context, 'totalTax'), amount: tax, icon: Icons.account_balance_wallet_outlined)),
           ]),
           const SizedBox(height: 22),
           Text(query.isEmpty ? tr(context, 'latestInvoices') : tr(context, 'allInvoices'), style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
@@ -333,17 +333,39 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 class _Summary extends StatelessWidget {
-  const _Summary({required this.label, required this.value, required this.icon});
+  const _Summary({
+    required this.label,
+    this.value,
+    this.amount,
+    required this.icon,
+  });
 
   final String label;
-  final String value;
+  final String? value;
+  final double? amount;
   final IconData icon;
 
   @override
   Widget build(BuildContext context) => Card(
         child: Padding(
           padding: const EdgeInsets.all(11),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Icon(icon, size: 20, color: Theme.of(context).colorScheme.primary), const SizedBox(height: 7), Text(label, style: Theme.of(context).textTheme.bodySmall, maxLines: 1, overflow: TextOverflow.ellipsis), const SizedBox(height: 3), Text(value, style: const TextStyle(fontWeight: FontWeight.w800), maxLines: 1, overflow: TextOverflow.ellipsis)]),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(icon, size: 20, color: Theme.of(context).colorScheme.primary),
+              const SizedBox(height: 7),
+              Text(label, style: Theme.of(context).textTheme.bodySmall, maxLines: 1, overflow: TextOverflow.ellipsis),
+              const SizedBox(height: 3),
+              if (amount != null)
+                SarAmount(
+                  amount: amount!,
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                  symbolSize: 12,
+                )
+              else
+                Text(value ?? '', style: const TextStyle(fontWeight: FontWeight.w800), maxLines: 1, overflow: TextOverflow.ellipsis),
+            ],
+          ),
         ),
       );
 }

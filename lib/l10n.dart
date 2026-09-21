@@ -79,6 +79,19 @@ class AppL10n {
     'fileCreated': 'تم إنشاء الملف، اختر تطبيقًا لمشاركته.',
     'error': 'حدث خطأ',
     'chooseFile': 'اختر ملف النسخة الاحتياطية',
+    'invoiceImage': 'صورة الفاتورة',
+    'addImage': 'إضافة صورة الفاتورة',
+    'changeImage': 'تغيير الصورة',
+    'removeImage': 'حذف الصورة',
+    'viewImage': 'عرض الصورة',
+    'takePhoto': 'التقاط بالكاميرا',
+    'chooseFromGallery': 'اختيار من المعرض',
+    'invoiceDetails': 'تفاصيل الفاتورة',
+    'subtotal': 'المبلغ قبل الضريبة',
+    'totalWithTax': 'الإجمالي شامل الضريبة',
+    'noImageAttached': 'لا توجد صورة مرفقة',
+    'hasImage': 'مرفق صورة',
+    'copied': 'تم النسخ',
   };
 
   static const _en = <String, String>{
@@ -151,6 +164,19 @@ class AppL10n {
     'fileCreated': 'File created. Choose an app to share it.',
     'error': 'Error',
     'chooseFile': 'Choose backup file',
+    'invoiceImage': 'Invoice image',
+    'addImage': 'Add invoice image',
+    'changeImage': 'Change image',
+    'removeImage': 'Delete image',
+    'viewImage': 'View image',
+    'takePhoto': 'Take with camera',
+    'chooseFromGallery': 'Choose from gallery',
+    'invoiceDetails': 'Invoice details',
+    'subtotal': 'Subtotal (before tax)',
+    'totalWithTax': 'Total with tax',
+    'noImageAttached': 'No image attached',
+    'hasImage': 'Image attached',
+    'copied': 'Copied',
   };
 }
 

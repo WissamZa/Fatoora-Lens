@@ -1,7 +1,7 @@
 name: fatoora_lens
 description: Fatoora Lens - قارئ فواتير ZATCA مع تخزين محلي وتحليلات وتصدير.
 publish_to: "none"
-version: 1.0.4+1
+version: 1.0.5+1
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
@@ -23,6 +23,7 @@ dependencies:
   pdf: ^3.13.1
   share_plus: ^13.3.0
   sqflite: ^2.4.4
+  flutter_svg: ^2.3.0
 
 dev_dependencies:
   flutter_test:
@@ -33,3 +34,4 @@ flutter:
   uses-material-design: true
   assets:
     - assets/fonts/NotoSansArabic-Regular.ttf
+    - assets/icons/sar_symbol.svg

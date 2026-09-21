@@ -39,6 +39,7 @@ class DatabaseService {
         vat_amount REAL NOT NULL,
         raw_payload TEXT NOT NULL,
         note TEXT NOT NULL DEFAULT '',
+        image_path TEXT,
         created_at TEXT NOT NULL
       )
     ''');
@@ -47,6 +48,10 @@ class DatabaseService {
     final hasNote = columns.any((row) => row['name'] == 'note');
     if (!hasNote) {
       await database.execute("ALTER TABLE invoices ADD COLUMN note TEXT NOT NULL DEFAULT ''");
+    }
+    final hasImagePath = columns.any((row) => row['name'] == 'image_path');
+    if (!hasImagePath) {
+      await database.execute('ALTER TABLE invoices ADD COLUMN image_path TEXT');
     }
     await database.execute(
       'CREATE INDEX IF NOT EXISTS idx_invoices_seller ON invoices(seller_name)',
