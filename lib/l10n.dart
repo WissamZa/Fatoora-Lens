@@ -10,8 +10,8 @@ class AppL10n {
   }
 
   static const _ar = <String, String>{
-    'appTitle': 'فواتير الزكاة',
-    'appSubtitle': 'إدارة فواتيرك من مكان واحد',
+    'appTitle': 'عدسة فاتورة',
+    'appSubtitle': 'مسح وإدارة فواتير ZATCA',
     'home': 'الرئيسية',
     'shops': 'المحلات',
     'analysis': 'التحليل',
@@ -78,8 +78,8 @@ class AppL10n {
   };
 
   static const _en = <String, String>{
-    'appTitle': 'Zakat Invoices',
-    'appSubtitle': 'Manage your invoices in one place',
+    'appTitle': 'Fatoora Lens',
+    'appSubtitle': 'Scan and manage ZATCA invoices',
     'home': 'Home',
     'shops': 'Shops',
     'analysis': 'Analysis',

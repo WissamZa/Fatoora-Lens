@@ -1,5 +1,5 @@
 name: zakat_invoice_scanner
-description: قارئ فواتير الزكاة من QR مع تخزين محلي وتصدير CSV.
+description: Fatoora Lens - قارئ فواتير ZATCA مع تخزين محلي وتحليلات وتصدير.
 publish_to: "none"
 version: 1.0.0+1
 

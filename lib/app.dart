@@ -26,7 +26,7 @@ class StartupErrorApp extends StatelessWidget {
       home: Directionality(
         textDirection: TextDirection.rtl,
         child: Scaffold(
-          appBar: AppBar(title: const Text('فواتير الزكاة')),
+          appBar: AppBar(title: const Text('عدسة فاتورة')),
           body: Padding(
             padding: const EdgeInsets.all(24),
             child: Center(
@@ -132,7 +132,7 @@ class _ZakatInvoiceAppState extends State<ZakatInvoiceApp> {
     final locale = Locale(_english ? 'en' : 'ar');
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: _english ? 'Zakat Invoices' : 'فواتير الزكاة',
+      title: _english ? 'Fatoora Lens' : 'عدسة فاتورة',
       theme: _theme(Brightness.light),
       darkTheme: _theme(Brightness.dark),
       themeMode: _darkMode ? ThemeMode.dark : ThemeMode.light,
@@ -165,7 +165,7 @@ class InitializationErrorPage extends StatelessWidget {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
-        appBar: AppBar(title: const Text('فواتير الزكاة')),
+        appBar: AppBar(title: const Text('عدسة فاتورة')),
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
