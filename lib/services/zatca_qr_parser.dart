@@ -39,6 +39,11 @@ class ZatcaQrParser {
     );
   }
 
+  /// Tags 1–5 are UTF-8 text fields required by the ZATCA standard.
+  /// Tags 6–9 (Phase 2) carry binary data (hash, signature, public key,
+  /// certificate) and must NOT be decoded as UTF-8.
+  static const _textTags = {1, 2, 3, 4, 5};
+
   static Map<int, String> _decodeTlv(String payload) {
     var encoded = payload.trim();
     final commaIndex = encoded.indexOf(',');
@@ -56,11 +61,29 @@ class ZatcaQrParser {
           throw const FormatException('بنية TLV غير مكتملة.');
         }
         final tag = bytes[offset++];
-        final length = bytes[offset++];
+        var length = bytes[offset++];
+
+        // BER-TLV multi-byte length: if the high bit is set, the lower
+        // 7 bits indicate how many following bytes encode the real length.
+        if (length > 127) {
+          final lengthBytes = length & 0x7F;
+          if (lengthBytes == 0 || offset + lengthBytes > bytes.length) {
+            throw const FormatException('طول بيانات TLV غير صحيح.');
+          }
+          length = 0;
+          for (var i = 0; i < lengthBytes; i++) {
+            length = (length << 8) | bytes[offset++];
+          }
+        }
+
         if (offset + length > bytes.length) {
           throw const FormatException('طول بيانات TLV غير صحيح.');
         }
-        fields[tag] = utf8.decode(bytes.sublist(offset, offset + length));
+
+        // Only decode text tags (1–5); skip binary tags (6+).
+        if (_textTags.contains(tag)) {
+          fields[tag] = utf8.decode(bytes.sublist(offset, offset + length));
+        }
         offset += length;
       }
       return fields;
