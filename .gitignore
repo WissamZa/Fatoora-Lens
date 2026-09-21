@@ -11,3 +11,9 @@ ios/Pods/
 ios/.symlinks/
 ios/Flutter/ephemeral/
 *.iml
+
+# Android signing keys
+*.jks
+*.keystore
+android/key.properties
+key.properties
