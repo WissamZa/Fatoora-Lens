@@ -45,6 +45,7 @@ class _HomeScreenState extends State<HomeScreen> {
   int _tabIndex = 0;
   bool _loading = true;
   bool _busy = false;
+  String? _loadError;
 
   @override
   void initState() {
@@ -59,14 +60,23 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _loadData() async {
-    final invoices = await widget.database.getInvoices();
-    final shops = await widget.database.getShops();
-    if (!mounted) return;
-    setState(() {
-      _invoices = invoices;
-      _shops = shops;
-      _loading = false;
-    });
+    try {
+      final invoices = await widget.database.getInvoices();
+      final shops = await widget.database.getShops();
+      if (!mounted) return;
+      setState(() {
+        _invoices = invoices;
+        _shops = shops;
+        _loadError = null;
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loadError = '$error';
+        _loading = false;
+      });
+    }
   }
 
   Future<void> _scanCamera() async {
@@ -242,7 +252,11 @@ class _HomeScreenState extends State<HomeScreen> {
             IconButton(onPressed: _exportCsv, tooltip: tr(context, 'exportCsv'), icon: const Icon(Icons.file_download_outlined)),
         ],
       ),
-      body: _loading ? const Center(child: CircularProgressIndicator()) : pages[_tabIndex],
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _loadError != null
+              ? _LoadError(error: _loadError!, onRetry: _loadData)
+              : pages[_tabIndex],
       bottomNavigationBar: NavigationBar(
         selectedIndex: _tabIndex,
         onDestinationSelected: (index) => setState(() => _tabIndex = index),
@@ -330,6 +344,32 @@ class _Summary extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.all(11),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Icon(icon, size: 20, color: Theme.of(context).colorScheme.primary), const SizedBox(height: 7), Text(label, style: Theme.of(context).textTheme.bodySmall, maxLines: 1, overflow: TextOverflow.ellipsis), const SizedBox(height: 3), Text(value, style: const TextStyle(fontWeight: FontWeight.w800), maxLines: 1, overflow: TextOverflow.ellipsis)]),
+        ),
+      );
+}
+
+class _LoadError extends StatelessWidget {
+  const _LoadError({required this.error, required this.onRetry});
+
+  final String error;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) => Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.cloud_off_rounded, size: 58, color: Colors.redAccent),
+              const SizedBox(height: 12),
+              Text(AppL10n.isEnglish(context) ? 'Could not load local data.' : 'تعذر تحميل البيانات المحلية.', textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w800)),
+              const SizedBox(height: 8),
+              SelectableText(error, textAlign: TextAlign.center),
+              const SizedBox(height: 14),
+              FilledButton.icon(onPressed: onRetry, icon: const Icon(Icons.refresh_rounded), label: Text(AppL10n.isEnglish(context) ? 'Retry' : 'إعادة المحاولة')),
+            ],
+          ),
         ),
       );
 }

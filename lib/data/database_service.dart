@@ -10,45 +10,27 @@ class DatabaseService {
   Database? _database;
 
   Future<void> initialize() async {
+    if (_database != null) return;
+
     final directory = await getApplicationDocumentsDirectory();
     final path = '${directory.path}/zakat_invoices.db';
-    _database = await openDatabase(
-      path,
-      version: 2,
-      onCreate: (database, version) async => _createSchema(database),
-      onUpgrade: (database, oldVersion, newVersion) async {
-        if (oldVersion < 2) {
-          await database.execute("ALTER TABLE invoices ADD COLUMN note TEXT NOT NULL DEFAULT ''");
-          await database.execute('''
-            CREATE TABLE shops (
-              seller_name TEXT PRIMARY KEY,
-              vat_number TEXT NOT NULL DEFAULT '',
-              note TEXT NOT NULL DEFAULT '',
-              created_at TEXT NOT NULL
-            )
-          ''');
-          await database.execute('''
-            CREATE TABLE settings (
-              key TEXT PRIMARY KEY,
-              value TEXT NOT NULL
-            )
-          ''');
-          final invoices = await database.query('invoices');
-          for (final row in invoices) {
-            await _upsertShop(
-              database,
-              sellerName: row['seller_name'] as String,
-              vatNumber: (row['vat_number'] as String?) ?? '',
-            );
-          }
-        }
-      },
-    );
+    try {
+      _database = await openDatabase(
+        path,
+        version: 3,
+        onCreate: (database, version) => _ensureSchema(database),
+        onUpgrade: (database, oldVersion, newVersion) => _ensureSchema(database),
+      );
+      await _ensureSchema(_database!);
+    } catch (_) {
+      _database = null;
+      rethrow;
+    }
   }
 
-  Future<void> _createSchema(Database database) async {
+  Future<void> _ensureSchema(DatabaseExecutor database) async {
     await database.execute('''
-      CREATE TABLE invoices (
+      CREATE TABLE IF NOT EXISTS invoices (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         seller_name TEXT NOT NULL,
         vat_number TEXT NOT NULL DEFAULT '',
@@ -60,11 +42,17 @@ class DatabaseService {
         created_at TEXT NOT NULL
       )
     ''');
+
+    final columns = await database.rawQuery('PRAGMA table_info(invoices)');
+    final hasNote = columns.any((row) => row['name'] == 'note');
+    if (!hasNote) {
+      await database.execute("ALTER TABLE invoices ADD COLUMN note TEXT NOT NULL DEFAULT ''");
+    }
     await database.execute(
-      'CREATE INDEX idx_invoices_seller ON invoices(seller_name)',
+      'CREATE INDEX IF NOT EXISTS idx_invoices_seller ON invoices(seller_name)',
     );
     await database.execute('''
-      CREATE TABLE shops (
+      CREATE TABLE IF NOT EXISTS shops (
         seller_name TEXT PRIMARY KEY,
         vat_number TEXT NOT NULL DEFAULT '',
         note TEXT NOT NULL DEFAULT '',
@@ -72,14 +60,29 @@ class DatabaseService {
       )
     ''');
     await database.execute('''
-      CREATE TABLE settings (
+      CREATE TABLE IF NOT EXISTS settings (
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL
       )
     ''');
+
+    final invoices = await database.query('invoices');
+    for (final row in invoices) {
+      await _upsertShop(
+        database,
+        sellerName: row['seller_name'] as String,
+        vatNumber: (row['vat_number'] as String?) ?? '',
+      );
+    }
   }
 
-  Database get _db => _database!;
+  Database get _db {
+    final database = _database;
+    if (database == null) {
+      throw StateError('Database is not initialized');
+    }
+    return database;
+  }
 
   Future<List<Invoice>> getInvoices({String? search}) async {
     final rows = await _db.query(
@@ -123,27 +126,24 @@ class DatabaseService {
         invoice.toMap()..remove('id'),
         conflictAlgorithm: ConflictAlgorithm.abort,
       );
-      await _upsertShop(
-        transaction,
-        sellerName: invoice.sellerName,
-        vatNumber: invoice.vatNumber,
-      );
+      await _upsertShop(transaction, sellerName: invoice.sellerName, vatNumber: invoice.vatNumber);
       return id;
     });
   }
 
   Future<void> updateInvoice(Invoice invoice) async {
-    await _db.update(
-      'invoices',
-      invoice.toMap()..remove('id'),
-      where: 'id = ?',
-      whereArgs: [invoice.id],
-    );
-    await _upsertShop(
-      _db,
-      sellerName: invoice.sellerName,
-      vatNumber: invoice.vatNumber,
-    );
+    await _db.transaction((transaction) async {
+      final previous = await transaction.query('invoices', columns: ['seller_name'], where: 'id = ?', whereArgs: [invoice.id], limit: 1);
+      final oldSeller = previous.isEmpty ? null : previous.first['seller_name'] as String?;
+      await transaction.update('invoices', invoice.toMap()..remove('id'), where: 'id = ?', whereArgs: [invoice.id]);
+      await _upsertShop(transaction, sellerName: invoice.sellerName, vatNumber: invoice.vatNumber);
+      if (oldSeller != null && oldSeller != invoice.sellerName) {
+        await transaction.rawDelete(
+          'DELETE FROM shops WHERE seller_name = ? AND NOT EXISTS (SELECT 1 FROM invoices WHERE seller_name = ?)',
+          [oldSeller, oldSeller],
+        );
+      }
+    });
   }
 
   Future<void> deleteInvoice(int id) async {
@@ -151,36 +151,22 @@ class DatabaseService {
   }
 
   Future<void> updateShopNote(String sellerName, String note) async {
-    await _db.update(
-      'shops',
-      {'note': note.trim()},
-      where: 'seller_name = ?',
-      whereArgs: [sellerName],
-    );
+    await _db.update('shops', {'note': note.trim()}, where: 'seller_name = ?', whereArgs: [sellerName]);
   }
 
   Future<String?> getSetting(String key) async {
-    final rows = await _db.query('settings', where: 'key = ?', whereArgs: [key]);
+    final rows = await _db.query('settings', where: 'key = ?', whereArgs: [key], limit: 1);
     return rows.isEmpty ? null : rows.first['value'] as String?;
   }
 
   Future<void> setSetting(String key, String value) async {
-    await _db.insert(
-      'settings',
-      {'key': key, 'value': value},
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    await _db.insert('settings', {'key': key, 'value': value}, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   Future<String> createBackupJson() async {
     final invoices = await getInvoices();
     final shops = await _db.query('shops');
-    return jsonEncode({
-      'schemaVersion': 2,
-      'createdAt': DateTime.now().toIso8601String(),
-      'invoices': invoices.map((invoice) => invoice.toMap()).toList(),
-      'shops': shops,
-    });
+    return jsonEncode({'schemaVersion': 3, 'createdAt': DateTime.now().toIso8601String(), 'invoices': invoices.map((invoice) => invoice.toMap()).toList(), 'shops': shops});
   }
 
   Future<void> restoreBackupJson(String value) async {
@@ -188,15 +174,8 @@ class DatabaseService {
     if (decoded is! Map<String, dynamic> || decoded['invoices'] is! List) {
       throw const FormatException('Invalid backup format');
     }
-    final invoiceMaps = (decoded['invoices'] as List)
-        .whereType<Map>()
-        .map((row) => Map<String, Object?>.from(row))
-        .map(Invoice.fromMap)
-        .toList();
-    final shopMaps = (decoded['shops'] as List? ?? const [])
-        .whereType<Map>()
-        .map((row) => Map<String, Object?>.from(row))
-        .toList();
+    final invoiceMaps = (decoded['invoices'] as List).whereType<Map>().map((row) => Map<String, Object?>.from(row)).map(Invoice.fromMap).toList();
+    final shopMaps = (decoded['shops'] as List? ?? const []).whereType<Map>().map((row) => Map<String, Object?>.from(row)).toList();
 
     await _db.transaction((transaction) async {
       await transaction.delete('invoices');
@@ -205,28 +184,15 @@ class DatabaseService {
         await transaction.insert('invoices', invoice.toMap()..remove('id'));
       }
       for (final shop in shopMaps) {
-        await transaction.insert('shops', {
-          'seller_name': shop['seller_name'],
-          'vat_number': shop['vat_number'] ?? '',
-          'note': shop['note'] ?? '',
-          'created_at': shop['created_at'] ?? DateTime.now().toIso8601String(),
-        });
+        await transaction.insert('shops', {'seller_name': shop['seller_name'], 'vat_number': shop['vat_number'] ?? '', 'note': shop['note'] ?? '', 'created_at': shop['created_at'] ?? DateTime.now().toIso8601String()});
       }
       for (final invoice in invoiceMaps) {
-        await _upsertShop(
-          transaction,
-          sellerName: invoice.sellerName,
-          vatNumber: invoice.vatNumber,
-        );
+        await _upsertShop(transaction, sellerName: invoice.sellerName, vatNumber: invoice.vatNumber);
       }
     });
   }
 
-  Future<void> _upsertShop(
-    DatabaseExecutor executor, {
-    required String sellerName,
-    required String vatNumber,
-  }) async {
+  Future<void> _upsertShop(DatabaseExecutor executor, {required String sellerName, required String vatNumber}) async {
     await executor.rawInsert(
       '''INSERT INTO shops (seller_name, vat_number, note, created_at)
          VALUES (?, ?, '', ?)

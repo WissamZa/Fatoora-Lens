@@ -12,10 +12,55 @@ class ZakatInvoiceApp extends StatefulWidget {
   State<ZakatInvoiceApp> createState() => _ZakatInvoiceAppState();
 }
 
+class StartupErrorApp extends StatelessWidget {
+  const StartupErrorApp({required this.error, this.stackTrace, super.key});
+
+  final Object error;
+  final StackTrace? stackTrace;
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(useMaterial3: true, colorSchemeSeed: const Color(0xFF0A7A67)),
+      home: Directionality(
+        textDirection: TextDirection.rtl,
+        child: Scaffold(
+          appBar: AppBar(title: const Text('فواتير الزكاة')),
+          body: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Center(
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.error_outline_rounded, size: 64, color: Colors.redAccent),
+                    const SizedBox(height: 16),
+                    const Text('تعذر تشغيل قاعدة البيانات', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800), textAlign: TextAlign.center),
+                    const SizedBox(height: 12),
+                    SelectableText('$error', textAlign: TextAlign.center),
+                    if (stackTrace != null) ...[
+                      const SizedBox(height: 14),
+                      ExpansionTile(title: const Text('تفاصيل الخطأ'), children: [SelectableText('$stackTrace')]),
+                    ],
+                    const SizedBox(height: 18),
+                    const Text('أغلق التطبيق وافتحه مرة أخرى. إذا استمر الخطأ أرسل تفاصيل الخطأ الظاهرة أعلاه.', textAlign: TextAlign.center),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _ZakatInvoiceAppState extends State<ZakatInvoiceApp> {
   bool _darkMode = false;
   bool _english = false;
   bool _settingsLoaded = false;
+  String? _settingsError;
 
   @override
   void initState() {
@@ -24,14 +69,22 @@ class _ZakatInvoiceAppState extends State<ZakatInvoiceApp> {
   }
 
   Future<void> _loadSettings() async {
-    final dark = await widget.database.getSetting('dark_mode');
-    final language = await widget.database.getSetting('language');
-    if (!mounted) return;
-    setState(() {
-      _darkMode = dark == 'true';
-      _english = language == 'en';
-      _settingsLoaded = true;
-    });
+    try {
+      final dark = await widget.database.getSetting('dark_mode');
+      final language = await widget.database.getSetting('language');
+      if (!mounted) return;
+      setState(() {
+        _darkMode = dark == 'true';
+        _english = language == 'en';
+        _settingsLoaded = true;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _settingsError = '$error';
+        _settingsLoaded = true;
+      });
+    }
   }
 
   Future<void> _toggleTheme() async {
@@ -87,6 +140,8 @@ class _ZakatInvoiceAppState extends State<ZakatInvoiceApp> {
       supportedLocales: const [Locale('ar'), Locale('en')],
       home: !_settingsLoaded
           ? const Scaffold(body: Center(child: CircularProgressIndicator()))
+          : _settingsError != null
+              ? InitializationErrorPage(error: _settingsError!)
           : Directionality(
               textDirection: _english ? TextDirection.ltr : TextDirection.rtl,
               child: HomeScreen(
@@ -96,6 +151,39 @@ class _ZakatInvoiceAppState extends State<ZakatInvoiceApp> {
                 onToggleLanguage: _toggleLanguage,
               ),
             ),
+    );
+  }
+}
+
+class InitializationErrorPage extends StatelessWidget {
+  const InitializationErrorPage({required this.error, super.key});
+
+  final String error;
+
+  @override
+  Widget build(BuildContext context) {
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        appBar: AppBar(title: const Text('فواتير الزكاة')),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.error_outline_rounded, size: 64, color: Colors.redAccent),
+                const SizedBox(height: 16),
+                const Text('تعذر تحميل إعدادات التطبيق', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800), textAlign: TextAlign.center),
+                const SizedBox(height: 12),
+                SelectableText(error, textAlign: TextAlign.center),
+                const SizedBox(height: 16),
+                const Text('أرسل نص الخطأ الظاهر للمطور بدل ظهور صفحة فارغة.', textAlign: TextAlign.center),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
