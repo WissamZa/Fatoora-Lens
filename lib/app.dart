@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'data/database_service.dart';
 import 'screens/home_screen.dart';
@@ -22,6 +23,13 @@ class StartupErrorApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
+      locale: const Locale('ar'),
+      supportedLocales: const [Locale('ar'), Locale('en')],
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       theme: ThemeData(useMaterial3: true, colorSchemeSeed: const Color(0xFF0A7A67)),
       home: Directionality(
         textDirection: TextDirection.rtl,
@@ -138,6 +146,11 @@ class _FatooraLensAppState extends State<FatooraLensApp> {
       themeMode: _darkMode ? ThemeMode.dark : ThemeMode.light,
       locale: locale,
       supportedLocales: const [Locale('ar'), Locale('en')],
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       home: !_settingsLoaded
           ? const Scaffold(body: Center(child: CircularProgressIndicator()))
           : _settingsError != null
