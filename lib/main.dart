@@ -17,7 +17,7 @@ Future<void> main() async {
 
   runApp(
     startupError == null
-        ? ZakatInvoiceApp(database: database)
+        ? FatooraLensApp(database: database)
         : StartupErrorApp(error: startupError, stackTrace: startupStack),
   );
 }

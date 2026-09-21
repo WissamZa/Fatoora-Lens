@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:zakat_invoice_scanner/services/zatca_qr_parser.dart';
+import 'package:fatoora_lens/services/zatca_qr_parser.dart';
 
 String _tlv(Map<int, String> fields) {
   final bytes = <int>[];

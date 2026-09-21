@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
+import '../l10n.dart';
+
 class ScannerScreen extends StatefulWidget {
   const ScannerScreen({super.key});
 
@@ -33,17 +35,17 @@ class _ScannerScreenState extends State<ScannerScreen> {
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
-        title: const Text('مسح رمز الفاتورة'),
+        title: Text(tr(context, 'scanTitle')),
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
         actions: [
           IconButton(
-            tooltip: 'الفلاش',
+            tooltip: tr(context, 'flash'),
             onPressed: _controller.toggleTorch,
             icon: const Icon(Icons.flash_on_rounded),
           ),
           IconButton(
-            tooltip: 'تبديل الكاميرا',
+            tooltip: tr(context, 'switchCamera'),
             onPressed: _controller.switchCamera,
             icon: const Icon(Icons.flip_camera_android_rounded),
           ),
@@ -68,7 +70,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
             right: 24,
             bottom: 32,
             child: Text(
-              'وجّه الكاميرا نحو رمز QR الموجود في الفاتورة',
+              tr(context, 'cameraScanHint'),
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     color: Colors.white,
@@ -82,8 +84,8 @@ class _ScannerScreenState extends State<ScannerScreen> {
   }
 
   @override
-  Future<void> dispose() async {
-    await _controller.dispose();
+  void dispose() {
+    _controller.dispose();
     super.dispose();
   }
 }

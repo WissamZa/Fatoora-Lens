@@ -1,4 +1,4 @@
-package com.example.zakat_invoice_scanner
+package com.fatooralens.app
 
 import io.flutter.embedding.android.FlutterActivity
 

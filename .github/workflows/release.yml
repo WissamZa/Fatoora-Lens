@@ -53,7 +53,7 @@ jobs:
         run: |
           gh release create "$RELEASE_TAG" \
             build/app/outputs/flutter-apk/*.apk \
-            --title "Zakat Invoice Scanner $RELEASE_TAG" \
+            --title "Fatoora Lens $RELEASE_TAG" \
             --generate-notes
 
       - name: Upload symbols as workflow artifact

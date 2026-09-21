@@ -31,9 +31,9 @@ class ExportService {
     final stamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
     await _shareBytes(
       utf8.encode(content),
-      'zakat_invoices_$stamp.csv',
+      'fatoora_lens_$stamp.csv',
       'text/csv',
-      english ? 'Zakat invoices CSV' : 'فواتير الزكاة CSV',
+      english ? 'Fatoora Lens CSV' : 'فواتير عدسة فاتورة CSV',
     );
   }
 
@@ -41,9 +41,9 @@ class ExportService {
     final stamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
     await _shareBytes(
       utf8.encode(json),
-      'zakat_backup_$stamp.json',
+      'fatoora_lens_backup_$stamp.json',
       'application/json',
-      english ? 'Zakat invoices backup' : 'نسخة احتياطية لفواتير الزكاة',
+      english ? 'Fatoora Lens backup' : 'نسخة احتياطية عدسة فاتورة',
     );
   }
 
@@ -112,7 +112,7 @@ class ExportService {
     final stamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
     await _shareBytes(
       await document.save(),
-      'zakat_invoices_$stamp.pdf',
+      'fatoora_lens_$stamp.pdf',
       'application/pdf',
       title,
     );

@@ -3,13 +3,13 @@ import 'package:flutter/material.dart';
 import 'data/database_service.dart';
 import 'screens/home_screen.dart';
 
-class ZakatInvoiceApp extends StatefulWidget {
-  const ZakatInvoiceApp({required this.database, super.key});
+class FatooraLensApp extends StatefulWidget {
+  const FatooraLensApp({required this.database, super.key});
 
   final DatabaseService database;
 
   @override
-  State<ZakatInvoiceApp> createState() => _ZakatInvoiceAppState();
+  State<FatooraLensApp> createState() => _FatooraLensAppState();
 }
 
 class StartupErrorApp extends StatelessWidget {
@@ -56,7 +56,7 @@ class StartupErrorApp extends StatelessWidget {
   }
 }
 
-class _ZakatInvoiceAppState extends State<ZakatInvoiceApp> {
+class _FatooraLensAppState extends State<FatooraLensApp> {
   bool _darkMode = false;
   bool _english = false;
   bool _settingsLoaded = false;

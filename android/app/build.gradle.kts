@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.zakat_invoice_scanner"
+    namespace = "com.fatooralens.app"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -14,7 +14,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.zakat_invoice_scanner"
+        applicationId = "com.fatooralens.app"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
