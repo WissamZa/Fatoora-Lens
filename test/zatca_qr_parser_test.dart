@@ -93,4 +93,16 @@ void main() {
     expect(invoice.totalAmount, 230);
     expect(invoice.vatAmount, 30);
   });
+
+  test('parses real user QR invoice (Panda Retail Company)', () {
+    const payload =
+        'ATXYtNix2YPYqSDYqNmG2K/YqSDZhNmE2KrYrNiy2KbYqQpQYW5kYSBSZXRhaWwgQ29tcGFueQIPMzAwMDU2NTIxNjEwMDAzAxQyMDI2LTA5LTIxVDEwOjEzOjU0WgQFMzIuOTkFBDQuMzAGLGNwVWdXM0tMcVpIUGZCN052V01xQ0tCWFFwODljdFlJRnJlVFJZSU9CS3M9B2BNRVFDSUNySUJ3NXlEb21KblpFa0JuTVgray8rUGoxTTFybDdWdXNKRXBTellVVURBaUFqM0x6U2tFUEVwdVJpWGZGMWo4MGZiUXBwU2RjYjA2Z2U4Q2cySWQzS3R3PT0IWDBWMBAGByqGSM49AgEGBSuBBAAKA0IABDLLfa4Sm2EQtEWSvxZFEjwBesI8Qz1BBtftV7lNXp7oRiMqgfGVjMLQepfkJyPi93e3vAw2xknE3Nvt9s+lkZMJRjBEAiAlGnjXpJk5rwVAdVBnN99thtOOv2kfQnnpuoo90w+bzwIgBKh74ltbnIKTd5LDQn8bMF1adrTLqwDrU/L9F9VN0kU=';
+
+    final invoice = ZatcaQrParser.parse(payload);
+    expect(invoice.sellerName, 'شركة بندة للتجزئة\nPanda Retail Company');
+    expect(invoice.vatNumber, '300056521610003');
+    expect(invoice.totalAmount, 32.99);
+    expect(invoice.vatAmount, 4.30);
+  });
 }
+
