@@ -53,7 +53,11 @@ void main() {
     expect(invoice.vatNumber, '310123456700003');
     expect(invoice.totalAmount, 115);
     expect(invoice.vatAmount, 15);
-    expect(ZatcaQrParser.formatTime(invoice.issuedAt), '01:05 PM');
+    expect(invoice.issuedAt.toUtc(), DateTime.utc(2026, 9, 21, 10, 5));
+    expect(
+      ZatcaQrParser.formatTime(DateTime(2026, 9, 21, 13, 5)),
+      '01:05 PM',
+    );
   });
 
   test('rejects a payload without required fields', () {
@@ -105,4 +109,3 @@ void main() {
     expect(invoice.vatAmount, 4.30);
   });
 }
-
