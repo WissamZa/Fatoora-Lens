@@ -81,9 +81,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _scanCamera() async {
-    final payload = await Navigator.of(context).push<String>(
-      MaterialPageRoute(builder: (_) => const ScannerScreen()),
-    );
+    final payload = await Navigator.of(
+      context,
+    ).push<String>(MaterialPageRoute(builder: (_) => const ScannerScreen()));
     if (payload != null) await _parseAndSave(payload);
   }
 
@@ -94,15 +94,29 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _busy = true);
     final controller = MobileScannerController(autoStart: false);
     try {
-      final capture = await controller.analyzeImage(image.path, formats: [BarcodeFormat.qrCode]);
-      final payload = capture?.barcodes.map((barcode) => barcode.rawValue).whereType<String>().firstOrNull;
+      final capture = await controller.analyzeImage(
+        image.path,
+        formats: [BarcodeFormat.qrCode],
+      );
+      final payload = capture?.barcodes
+          .map((barcode) => barcode.rawValue)
+          .whereType<String>()
+          .firstOrNull;
       if (payload == null || payload.isEmpty) {
-        _message(english ? 'No QR code found in the image.' : 'لم يتم العثور على QR في الصورة.');
+        _message(
+          english
+              ? 'No QR code found in the image.'
+              : 'لم يتم العثور على QR في الصورة.',
+        );
       } else {
         await _parseAndSave(payload);
       }
     } on UnsupportedError {
-      _message(english ? 'Image analysis is not supported here.' : 'قراءة الصور غير مدعومة على هذا الجهاز.');
+      _message(
+        english
+            ? 'Image analysis is not supported here.'
+            : 'قراءة الصور غير مدعومة على هذا الجهاز.',
+      );
     } catch (error) {
       _message('${english ? 'Error' : 'حدث خطأ'}: $error');
     } finally {
@@ -132,6 +146,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final updated = await showInvoiceEditor(context, invoice);
     if (updated == null) return;
     await widget.database.updateInvoice(updated);
+    await deleteReplacedInvoiceImage(invoice, updated);
     await _loadData();
     _message(savedText);
   }
@@ -144,8 +159,14 @@ class _HomeScreenState extends State<HomeScreen> {
         title: Text(tr(context, 'deleteInvoice')),
         content: Text(tr(context, 'deleteConfirm')),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(tr(context, 'cancel'))),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(tr(context, 'delete'))),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(tr(context, 'cancel')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(tr(context, 'delete')),
+          ),
         ],
       ),
     );
@@ -177,10 +198,20 @@ class _HomeScreenState extends State<HomeScreen> {
         context: context,
         builder: (context) => AlertDialog(
           title: Text(tr(context, 'restore')),
-          content: Text(AppL10n.isEnglish(context) ? 'Restoring will replace current local data.' : 'الاسترداد سيستبدل البيانات المحلية الحالية.'),
+          content: Text(
+            AppL10n.isEnglish(context)
+                ? 'Restoring will replace current local data.'
+                : 'الاسترداد سيستبدل البيانات المحلية الحالية.',
+          ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context, false), child: Text(tr(context, 'cancel'))),
-            FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(tr(context, 'restore'))),
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text(tr(context, 'cancel')),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: Text(tr(context, 'restore')),
+            ),
           ],
         ),
       );
@@ -246,30 +277,72 @@ class _HomeScreenState extends State<HomeScreen> {
     ];
     return Scaffold(
       appBar: AppBar(
-        title: Text(_tabIndex == 0 ? tr(context, 'appTitle') : [tr(context, 'shops'), tr(context, 'analysis'), tr(context, 'settings')][_tabIndex - 1]),
+        title: Text(
+          _tabIndex == 0
+              ? tr(context, 'appTitle')
+              : [
+                  tr(context, 'shops'),
+                  tr(context, 'analysis'),
+                  tr(context, 'settings'),
+                ][_tabIndex - 1],
+        ),
         actions: [
-          if (_busy) const Padding(padding: EdgeInsets.symmetric(horizontal: 16), child: Center(child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))))
+          if (_busy)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              child: Center(
+                child: SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+            )
           else if (_tabIndex == 0)
-            IconButton(onPressed: _exportCsv, tooltip: tr(context, 'exportCsv'), icon: const Icon(Icons.file_download_outlined)),
+            IconButton(
+              onPressed: _exportCsv,
+              tooltip: tr(context, 'exportCsv'),
+              icon: const Icon(Icons.file_download_outlined),
+            ),
         ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _loadError != null
-              ? _LoadError(error: _loadError!, onRetry: _loadData)
-              : pages[_tabIndex],
+          ? _LoadError(error: _loadError!, onRetry: _loadData)
+          : pages[_tabIndex],
       bottomNavigationBar: NavigationBar(
         selectedIndex: _tabIndex,
         onDestinationSelected: (index) => setState(() => _tabIndex = index),
         destinations: [
-          NavigationDestination(icon: const Icon(Icons.home_outlined), selectedIcon: const Icon(Icons.home_rounded), label: tr(context, 'home')),
-          NavigationDestination(icon: const Icon(Icons.store_outlined), selectedIcon: const Icon(Icons.store_rounded), label: tr(context, 'shops')),
-          NavigationDestination(icon: const Icon(Icons.insights_outlined), selectedIcon: const Icon(Icons.insights_rounded), label: tr(context, 'analysis')),
-          NavigationDestination(icon: const Icon(Icons.settings_outlined), selectedIcon: const Icon(Icons.settings_rounded), label: tr(context, 'settings')),
+          NavigationDestination(
+            icon: const Icon(Icons.home_outlined),
+            selectedIcon: const Icon(Icons.home_rounded),
+            label: tr(context, 'home'),
+          ),
+          NavigationDestination(
+            icon: const Icon(Icons.store_outlined),
+            selectedIcon: const Icon(Icons.store_rounded),
+            label: tr(context, 'shops'),
+          ),
+          NavigationDestination(
+            icon: const Icon(Icons.insights_outlined),
+            selectedIcon: const Icon(Icons.insights_rounded),
+            label: tr(context, 'analysis'),
+          ),
+          NavigationDestination(
+            icon: const Icon(Icons.settings_outlined),
+            selectedIcon: const Icon(Icons.settings_rounded),
+            label: tr(context, 'settings'),
+          ),
         ],
       ),
       floatingActionButton: _tabIndex == 0
-          ? FloatingActionButton.extended(onPressed: _busy ? null : _scanCamera, icon: const Icon(Icons.qr_code_scanner_rounded), label: Text(tr(context, 'scan')))
+          ? FloatingActionButton.extended(
+              onPressed: _busy ? null : _scanCamera,
+              icon: const Icon(Icons.qr_code_scanner_rounded),
+              label: Text(tr(context, 'scan')),
+            )
           : null,
     );
   }
@@ -278,10 +351,14 @@ class _HomeScreenState extends State<HomeScreen> {
     final query = _searchController.text.trim().toLowerCase();
     final filtered = _invoices.where((invoice) {
       if (query.isEmpty) return true;
-      return invoice.sellerName.toLowerCase().contains(query) || invoice.vatNumber.toLowerCase().contains(query);
+      return invoice.sellerName.toLowerCase().contains(query) ||
+          invoice.vatNumber.toLowerCase().contains(query);
     }).toList();
     final shown = query.isEmpty ? filtered.take(5).toList() : filtered;
-    final total = _invoices.fold<double>(0, (sum, item) => sum + item.totalAmount);
+    final total = _invoices.fold<double>(
+      0,
+      (sum, item) => sum + item.totalAmount,
+    );
     final tax = _invoices.fold<double>(0, (sum, item) => sum + item.vatAmount);
 
     return RefreshIndicator(
@@ -292,44 +369,153 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           _buildIntro(),
           const SizedBox(height: 14),
-          Row(children: [
-            Expanded(child: FilledButton.icon(onPressed: _busy ? null : _scanCamera, icon: const Icon(Icons.camera_alt_outlined), label: Text(tr(context, 'camera')), style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 15)))),
-            const SizedBox(width: 10),
-            Expanded(child: OutlinedButton.icon(onPressed: _busy ? null : _scanImage, icon: const Icon(Icons.photo_library_outlined), label: Text(tr(context, 'fromImage')), style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 15)))),
-          ]),
+          Row(
+            children: [
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: _busy ? null : _scanCamera,
+                  icon: const Icon(Icons.camera_alt_outlined),
+                  label: Text(tr(context, 'camera')),
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 15),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _busy ? null : _scanImage,
+                  icon: const Icon(Icons.photo_library_outlined),
+                  label: Text(tr(context, 'fromImage')),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 15),
+                  ),
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 14),
-          TextField(controller: _searchController, onChanged: (_) => setState(() {}), decoration: InputDecoration(prefixIcon: const Icon(Icons.search_rounded), hintText: tr(context, 'search'), suffixIcon: _searchController.text.isEmpty ? null : IconButton(onPressed: () { _searchController.clear(); setState(() {}); }, icon: const Icon(Icons.clear_rounded)))),
+          TextField(
+            controller: _searchController,
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(
+              prefixIcon: const Icon(Icons.search_rounded),
+              hintText: tr(context, 'search'),
+              suffixIcon: _searchController.text.isEmpty
+                  ? null
+                  : IconButton(
+                      onPressed: () {
+                        _searchController.clear();
+                        setState(() {});
+                      },
+                      icon: const Icon(Icons.clear_rounded),
+                    ),
+            ),
+          ),
           const SizedBox(height: 14),
-          Row(children: [
-            Expanded(child: _Summary(label: tr(context, 'totalInvoices'), value: '${_invoices.length}', icon: Icons.receipt_long_outlined)),
-            const SizedBox(width: 8),
-            Expanded(child: _Summary(label: tr(context, 'totalAmount'), amount: total, icon: Icons.payments_outlined)),
-            const SizedBox(width: 8),
-            Expanded(child: _Summary(label: tr(context, 'totalTax'), amount: tax, icon: Icons.account_balance_wallet_outlined)),
-          ]),
+          Row(
+            children: [
+              Expanded(
+                child: _Summary(
+                  label: tr(context, 'totalInvoices'),
+                  value: '${_invoices.length}',
+                  icon: Icons.receipt_long_outlined,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _Summary(
+                  label: tr(context, 'totalAmount'),
+                  amount: total,
+                  icon: Icons.payments_outlined,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _Summary(
+                  label: tr(context, 'totalTax'),
+                  amount: tax,
+                  icon: Icons.account_balance_wallet_outlined,
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 22),
-          Text(query.isEmpty ? tr(context, 'latestInvoices') : tr(context, 'allInvoices'), style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+          Text(
+            query.isEmpty
+                ? tr(context, 'latestInvoices')
+                : tr(context, 'allInvoices'),
+            style: Theme.of(
+              context,
+            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+          ),
           const SizedBox(height: 10),
           if (shown.isEmpty)
-            Padding(padding: const EdgeInsets.symmetric(vertical: 40), child: Center(child: Text(query.isEmpty ? tr(context, 'noInvoices') : tr(context, 'noSearchResults'))))
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 40),
+              child: Center(
+                child: Text(
+                  query.isEmpty
+                      ? tr(context, 'noInvoices')
+                      : tr(context, 'noSearchResults'),
+                ),
+              ),
+            )
           else
-            ...shown.map((invoice) => InvoiceTile(invoice: invoice, onEdit: () => _editInvoice(invoice), onDelete: () => _deleteInvoice(invoice))),
+            ...shown.map(
+              (invoice) => InvoiceTile(
+                invoice: invoice,
+                onEdit: () => _editInvoice(invoice),
+                onDelete: () => _deleteInvoice(invoice),
+              ),
+            ),
         ],
       ),
     );
   }
 
   Widget _buildIntro() => Card(
-        clipBehavior: Clip.antiAlias,
-        child: Container(
-          padding: const EdgeInsets.all(20),
-          decoration: const BoxDecoration(gradient: LinearGradient(colors: [Color(0xFF0A7A67), Color(0xFF159E83)], begin: Alignment.topRight, end: Alignment.bottomLeft)),
-          child: Row(children: [
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(tr(context, 'scanNow'), style: const TextStyle(color: Colors.white, fontSize: 21, fontWeight: FontWeight.w800)), const SizedBox(height: 5), Text(tr(context, 'scanHint'), style: const TextStyle(color: Colors.white70, height: 1.35))])),
-            Icon(Icons.receipt_long_rounded, size: 62, color: Colors.white.withValues(alpha: 0.9)),
-          ]),
+    clipBehavior: Clip.antiAlias,
+    child: Container(
+      padding: const EdgeInsets.all(20),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xFF0A7A67), Color(0xFF159E83)],
+          begin: Alignment.topRight,
+          end: Alignment.bottomLeft,
         ),
-      );
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  tr(context, 'scanNow'),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 21,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  tr(context, 'scanHint'),
+                  style: const TextStyle(color: Colors.white70, height: 1.35),
+                ),
+              ],
+            ),
+          ),
+          Icon(
+            Icons.receipt_long_rounded,
+            size: 62,
+            color: Colors.white.withValues(alpha: 0.9),
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 class _Summary extends StatelessWidget {
@@ -347,27 +533,37 @@ class _Summary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Card(
-        child: Padding(
-          padding: const EdgeInsets.all(11),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(icon, size: 20, color: Theme.of(context).colorScheme.primary),
-              const SizedBox(height: 7),
-              Text(label, style: Theme.of(context).textTheme.bodySmall, maxLines: 1, overflow: TextOverflow.ellipsis),
-              const SizedBox(height: 3),
-              if (amount != null)
-                SarAmount(
-                  amount: amount!,
-                  style: const TextStyle(fontWeight: FontWeight.w800),
-                  symbolSize: 12,
-                )
-              else
-                Text(value ?? '', style: const TextStyle(fontWeight: FontWeight.w800), maxLines: 1, overflow: TextOverflow.ellipsis),
-            ],
+    child: Padding(
+      padding: const EdgeInsets.all(11),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 20, color: Theme.of(context).colorScheme.primary),
+          const SizedBox(height: 7),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.bodySmall,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
-        ),
-      );
+          const SizedBox(height: 3),
+          if (amount != null)
+            SarAmount(
+              amount: amount!,
+              style: const TextStyle(fontWeight: FontWeight.w800),
+              symbolSize: 12,
+            )
+          else
+            Text(
+              value ?? '',
+              style: const TextStyle(fontWeight: FontWeight.w800),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+        ],
+      ),
+    ),
+  );
 }
 
 class _LoadError extends StatelessWidget {
@@ -378,22 +574,38 @@ class _LoadError extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.cloud_off_rounded, size: 58, color: Colors.redAccent),
-              const SizedBox(height: 12),
-              Text(AppL10n.isEnglish(context) ? 'Could not load local data.' : 'تعذر تحميل البيانات المحلية.', textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w800)),
-              const SizedBox(height: 8),
-              SelectableText(error, textAlign: TextAlign.center),
-              const SizedBox(height: 14),
-              FilledButton.icon(onPressed: onRetry, icon: const Icon(Icons.refresh_rounded), label: Text(AppL10n.isEnglish(context) ? 'Retry' : 'إعادة المحاولة')),
-            ],
+    child: Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(
+            Icons.cloud_off_rounded,
+            size: 58,
+            color: Colors.redAccent,
           ),
-        ),
-      );
+          const SizedBox(height: 12),
+          Text(
+            AppL10n.isEnglish(context)
+                ? 'Could not load local data.'
+                : 'تعذر تحميل البيانات المحلية.',
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 8),
+          SelectableText(error, textAlign: TextAlign.center),
+          const SizedBox(height: 14),
+          FilledButton.icon(
+            onPressed: onRetry,
+            icon: const Icon(Icons.refresh_rounded),
+            label: Text(
+              AppL10n.isEnglish(context) ? 'Retry' : 'إعادة المحاولة',
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 extension on Iterable<String?> {

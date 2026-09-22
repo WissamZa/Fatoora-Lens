@@ -8,7 +8,12 @@ import '../widgets/invoice_editor.dart';
 import '../widgets/sar_symbol.dart';
 
 class ShopsTab extends StatelessWidget {
-  const ShopsTab({required this.database, required this.shops, required this.onChanged, super.key});
+  const ShopsTab({
+    required this.database,
+    required this.shops,
+    required this.onChanged,
+    super.key,
+  });
 
   final DatabaseService database;
   final List<Shop> shops;
@@ -27,38 +32,59 @@ class ShopsTab extends StatelessWidget {
         final shop = shops[index];
         return Card(
           child: ListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 7),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 18,
+              vertical: 7,
+            ),
             leading: CircleAvatar(
               radius: 25,
               backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-              child: Icon(Icons.storefront_rounded, color: Theme.of(context).colorScheme.primary),
+              child: Icon(
+                Icons.storefront_rounded,
+                color: Theme.of(context).colorScheme.primary,
+              ),
             ),
-            title: Text(shop.name, style: const TextStyle(fontWeight: FontWeight.w800)),
+            title: Text(
+              shop.name,
+              style: const TextStyle(fontWeight: FontWeight.w800),
+            ),
             subtitle: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (shop.vatNumber.isNotEmpty)
-                  Text('${tr(context, 'vatNumber')}: ${shop.vatNumber}', style: Theme.of(context).textTheme.bodySmall),
+                  Text(
+                    '${tr(context, 'vatNumber')}: ${shop.vatNumber}',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
                 const SizedBox(height: 4),
                 Row(
                   children: [
-                    Text('${shop.invoices.length} ${shop.invoices.length == 1 ? tr(context, 'invoice') : tr(context, 'invoices')}  •  '),
+                    Text(
+                      '${shop.invoices.length} ${shop.invoices.length == 1 ? tr(context, 'invoice') : tr(context, 'invoices')}  •  ',
+                    ),
                     SarAmount(
                       amount: shop.totalAmount,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
                       symbolSize: 12,
                     ),
                   ],
                 ),
                 if (shop.note.isNotEmpty)
-                  Text('${tr(context, 'note')}: ${shop.note}', maxLines: 1, overflow: TextOverflow.ellipsis),
+                  Text(
+                    '${tr(context, 'note')}: ${shop.note}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
               ],
             ),
             trailing: const Icon(Icons.chevron_right_rounded),
             onTap: () async {
               await Navigator.of(context).push(
                 MaterialPageRoute(
-                  builder: (_) => ShopDetailsScreen(database: database, shop: shop),
+                  builder: (_) =>
+                      ShopDetailsScreen(database: database, shop: shop),
                 ),
               );
               onChanged();
@@ -71,7 +97,11 @@ class ShopsTab extends StatelessWidget {
 }
 
 class ShopDetailsScreen extends StatefulWidget {
-  const ShopDetailsScreen({required this.database, required this.shop, super.key});
+  const ShopDetailsScreen({
+    required this.database,
+    required this.shop,
+    super.key,
+  });
 
   final DatabaseService database;
   final Shop shop;
@@ -90,9 +120,11 @@ class _ShopDetailsScreenState extends State<ShopDetailsScreen> {
   }
 
   Future<void> _editInvoice(int index) async {
-    final updated = await showInvoiceEditor(context, _shop.invoices[index]);
+    final previous = _shop.invoices[index];
+    final updated = await showInvoiceEditor(context, previous);
     if (updated == null) return;
     await widget.database.updateInvoice(updated);
+    await deleteReplacedInvoiceImage(previous, updated);
     await _reload();
   }
 
@@ -103,8 +135,14 @@ class _ShopDetailsScreenState extends State<ShopDetailsScreen> {
         title: Text(tr(context, 'deleteInvoice')),
         content: Text(tr(context, 'deleteConfirm')),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(tr(context, 'cancel'))),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(tr(context, 'delete'))),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(tr(context, 'cancel')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(tr(context, 'delete')),
+          ),
         ],
       ),
     );
@@ -120,10 +158,20 @@ class _ShopDetailsScreenState extends State<ShopDetailsScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: Text(tr(context, 'shopNote')),
-        content: TextField(controller: controller, maxLines: 4, autofocus: true),
+        content: TextField(
+          controller: controller,
+          maxLines: 4,
+          autofocus: true,
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: Text(tr(context, 'cancel'))),
-          FilledButton(onPressed: () => Navigator.pop(context, controller.text), child: Text(tr(context, 'save'))),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(tr(context, 'cancel')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text),
+            child: Text(tr(context, 'save')),
+          ),
         ],
       ),
     );
@@ -153,37 +201,72 @@ class _ShopDetailsScreenState extends State<ShopDetailsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(_shop.name, style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+                  Text(
+                    _shop.name,
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
                   if (_shop.vatNumber.isNotEmpty)
-                    Text('${tr(context, 'vatNumber')}: ${_shop.vatNumber}', style: Theme.of(context).textTheme.bodySmall),
+                    Text(
+                      '${tr(context, 'vatNumber')}: ${_shop.vatNumber}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
                   const SizedBox(height: 14),
                   Row(
                     children: [
-                      Expanded(child: _Stat(label: tr(context, 'invoices'), value: '${_shop.invoices.length}')),
-                      Expanded(child: _Stat(label: tr(context, 'shopTotal'), amount: _shop.totalAmount)),
-                      Expanded(child: _Stat(label: tr(context, 'tax'), amount: _shop.totalTax)),
+                      Expanded(
+                        child: _Stat(
+                          label: tr(context, 'invoices'),
+                          value: '${_shop.invoices.length}',
+                        ),
+                      ),
+                      Expanded(
+                        child: _Stat(
+                          label: tr(context, 'shopTotal'),
+                          amount: _shop.totalAmount,
+                        ),
+                      ),
+                      Expanded(
+                        child: _Stat(
+                          label: tr(context, 'tax'),
+                          amount: _shop.totalTax,
+                        ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 10),
-                  OutlinedButton.icon(onPressed: _editNote, icon: const Icon(Icons.note_alt_outlined), label: Text(tr(context, 'shopNote'))),
+                  OutlinedButton.icon(
+                    onPressed: _editNote,
+                    icon: const Icon(Icons.note_alt_outlined),
+                    label: Text(tr(context, 'shopNote')),
+                  ),
                   if (_shop.note.isNotEmpty) ...[
                     const SizedBox(height: 8),
-                    Text(_shop.note, style: Theme.of(context).textTheme.bodyMedium),
+                    Text(
+                      _shop.note,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
                   ],
                 ],
               ),
             ),
           ),
           const SizedBox(height: 16),
-          Text(tr(context, 'oldestFirst'), style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+          Text(
+            tr(context, 'oldestFirst'),
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+          ),
           const SizedBox(height: 10),
           ..._shop.invoices.asMap().entries.map(
-                (entry) => InvoiceTile(
-                  invoice: entry.value,
-                  onEdit: () => _editInvoice(entry.key),
-                  onDelete: () => _deleteInvoice(entry.key),
-                ),
-              ),
+            (entry) => InvoiceTile(
+              invoice: entry.value,
+              onEdit: () => _editInvoice(entry.key),
+              onDelete: () => _deleteInvoice(entry.key),
+            ),
+          ),
         ],
       ),
     );
@@ -191,11 +274,7 @@ class _ShopDetailsScreenState extends State<ShopDetailsScreen> {
 }
 
 class _Stat extends StatelessWidget {
-  const _Stat({
-    required this.label,
-    this.value,
-    this.amount,
-  });
+  const _Stat({required this.label, this.value, this.amount});
 
   final String label;
   final String? value;
@@ -203,20 +282,20 @@ class _Stat extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: Theme.of(context).textTheme.bodySmall),
-          const SizedBox(height: 3),
-          if (amount != null)
-            SarAmount(
-              amount: amount!,
-              style: const TextStyle(fontWeight: FontWeight.w800),
-              symbolSize: 12,
-            )
-          else
-            Text(value ?? '', style: const TextStyle(fontWeight: FontWeight.w800)),
-        ],
-      );
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(label, style: Theme.of(context).textTheme.bodySmall),
+      const SizedBox(height: 3),
+      if (amount != null)
+        SarAmount(
+          amount: amount!,
+          style: const TextStyle(fontWeight: FontWeight.w800),
+          symbolSize: 12,
+        )
+      else
+        Text(value ?? '', style: const TextStyle(fontWeight: FontWeight.w800)),
+    ],
+  );
 }
 
 extension on Iterable<Shop> {

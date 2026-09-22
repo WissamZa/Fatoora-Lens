@@ -20,6 +20,23 @@ Future<Invoice?> showInvoiceEditor(
   );
 }
 
+Future<void> deleteReplacedInvoiceImage(
+  Invoice previous,
+  Invoice updated,
+) async {
+  final oldImagePath = previous.imagePath;
+  if (oldImagePath == null ||
+      oldImagePath.isEmpty ||
+      oldImagePath == updated.imagePath) {
+    return;
+  }
+  try {
+    await File(oldImagePath).delete();
+  } catch (_) {
+    // The invoice was saved successfully; a missing image should not change that.
+  }
+}
+
 class _InvoiceEditorDialog extends StatefulWidget {
   const _InvoiceEditorDialog({required this.invoice, required this.review});
 
@@ -44,8 +61,12 @@ class _InvoiceEditorDialogState extends State<_InvoiceEditorDialog> {
     final invoice = widget.invoice;
     _sellerController = TextEditingController(text: invoice.sellerName);
     _vatController = TextEditingController(text: invoice.vatNumber);
-    _amountController = TextEditingController(text: invoice.totalAmount.toStringAsFixed(2));
-    _taxController = TextEditingController(text: invoice.vatAmount.toStringAsFixed(2));
+    _amountController = TextEditingController(
+      text: invoice.totalAmount.toStringAsFixed(2),
+    );
+    _taxController = TextEditingController(
+      text: invoice.vatAmount.toStringAsFixed(2),
+    );
     _noteController = TextEditingController(text: invoice.note);
     _imagePath = invoice.imagePath;
   }
@@ -72,7 +93,9 @@ class _InvoiceEditorDialogState extends State<_InvoiceEditorDialog> {
         await imagesDir.create(recursive: true);
       }
       final filename = 'invoice_${DateTime.now().millisecondsSinceEpoch}.jpg';
-      final savedFile = await File(picked.path).copy('${imagesDir.path}/$filename');
+      final savedFile = await File(
+        picked.path,
+      ).copy('${imagesDir.path}/$filename');
 
       if (!mounted) return;
       setState(() {
@@ -80,9 +103,9 @@ class _InvoiceEditorDialogState extends State<_InvoiceEditorDialog> {
       });
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${tr(context, 'error')}: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('${tr(context, 'error')}: $e')));
     }
   }
 
@@ -100,7 +123,10 @@ class _InvoiceEditorDialogState extends State<_InvoiceEditorDialog> {
             children: [
               Text(
                 tr(context, 'invoiceImage'),
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
               ),
               const SizedBox(height: 12),
               ListTile(
@@ -140,10 +166,7 @@ class _InvoiceEditorDialogState extends State<_InvoiceEditorDialog> {
                 clipBehavior: Clip.none,
                 minScale: 0.5,
                 maxScale: 4.0,
-                child: Image.file(
-                  File(path),
-                  fit: BoxFit.contain,
-                ),
+                child: Image.file(File(path), fit: BoxFit.contain),
               ),
             ),
             Positioned(
@@ -163,11 +186,19 @@ class _InvoiceEditorDialogState extends State<_InvoiceEditorDialog> {
 
   void _save() {
     final seller = _sellerController.text.trim();
-    final amount = double.tryParse(_amountController.text.trim().replaceAll(',', ''));
+    final amount = double.tryParse(
+      _amountController.text.trim().replaceAll(',', ''),
+    );
     final tax = double.tryParse(_taxController.text.trim().replaceAll(',', ''));
     if (seller.isEmpty || amount == null || tax == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(AppL10n.isEnglish(context) ? 'Check the required fields.' : 'تحقق من الحقول المطلوبة.')),
+        SnackBar(
+          content: Text(
+            AppL10n.isEnglish(context)
+                ? 'Check the required fields.'
+                : 'تحقق من الحقول المطلوبة.',
+          ),
+        ),
       );
       return;
     }
@@ -188,7 +219,10 @@ class _InvoiceEditorDialogState extends State<_InvoiceEditorDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final hasImage = _imagePath != null && _imagePath!.isNotEmpty && File(_imagePath!).existsSync();
+    final hasImage =
+        _imagePath != null &&
+        _imagePath!.isNotEmpty &&
+        File(_imagePath!).existsSync();
 
     return AlertDialog(
       title: Text(tr(context, widget.review ? 'invoiceData' : 'editInvoice')),
@@ -226,7 +260,9 @@ class _InvoiceEditorDialogState extends State<_InvoiceEditorDialog> {
                         child: SarSymbol(size: 16),
                       ),
                     ),
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -240,7 +276,9 @@ class _InvoiceEditorDialogState extends State<_InvoiceEditorDialog> {
                         child: SarSymbol(size: 16),
                       ),
                     ),
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
                   ),
                 ),
               ],
@@ -259,7 +297,9 @@ class _InvoiceEditorDialogState extends State<_InvoiceEditorDialog> {
             // Invoice Image section
             Text(
               tr(context, 'invoiceImage'),
-              style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.bold),
+              style: theme.textTheme.labelLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
             ),
             const SizedBox(height: 8),
             if (hasImage) ...[
@@ -288,7 +328,11 @@ class _InvoiceEditorDialogState extends State<_InvoiceEditorDialog> {
                               width: 64,
                               height: 64,
                               color: Colors.black26,
-                              child: const Icon(Icons.zoom_in_rounded, color: Colors.white, size: 22),
+                              child: const Icon(
+                                Icons.zoom_in_rounded,
+                                color: Colors.white,
+                                size: 22,
+                              ),
                             ),
                           ],
                         ),
@@ -301,7 +345,10 @@ class _InvoiceEditorDialogState extends State<_InvoiceEditorDialog> {
                         children: [
                           Text(
                             tr(context, 'hasImage'),
-                            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                            ),
                           ),
                           const SizedBox(height: 4),
                           Wrap(
@@ -310,15 +357,25 @@ class _InvoiceEditorDialogState extends State<_InvoiceEditorDialog> {
                               InkWell(
                                 onTap: _showImageSourcePicker,
                                 child: Padding(
-                                  padding: const EdgeInsets.symmetric(vertical: 4),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 4,
+                                  ),
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      Icon(Icons.edit_outlined, size: 14, color: theme.colorScheme.primary),
+                                      Icon(
+                                        Icons.edit_outlined,
+                                        size: 14,
+                                        color: theme.colorScheme.primary,
+                                      ),
                                       const SizedBox(width: 4),
                                       Text(
                                         tr(context, 'changeImage'),
-                                        style: TextStyle(color: theme.colorScheme.primary, fontSize: 12, fontWeight: FontWeight.w600),
+                                        style: TextStyle(
+                                          color: theme.colorScheme.primary,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                        ),
                                       ),
                                     ],
                                   ),
@@ -327,15 +384,25 @@ class _InvoiceEditorDialogState extends State<_InvoiceEditorDialog> {
                               InkWell(
                                 onTap: () => setState(() => _imagePath = null),
                                 child: Padding(
-                                  padding: const EdgeInsets.symmetric(vertical: 4),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 4,
+                                  ),
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      Icon(Icons.delete_outline_rounded, size: 14, color: theme.colorScheme.error),
+                                      Icon(
+                                        Icons.delete_outline_rounded,
+                                        size: 14,
+                                        color: theme.colorScheme.error,
+                                      ),
                                       const SizedBox(width: 4),
                                       Text(
                                         tr(context, 'removeImage'),
-                                        style: TextStyle(color: theme.colorScheme.error, fontSize: 12, fontWeight: FontWeight.w600),
+                                        style: TextStyle(
+                                          color: theme.colorScheme.error,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                        ),
                                       ),
                                     ],
                                   ),
@@ -356,7 +423,9 @@ class _InvoiceEditorDialogState extends State<_InvoiceEditorDialog> {
                 label: Text(tr(context, 'addImage')),
                 style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                 ),
               ),
             ],
@@ -378,7 +447,9 @@ class _InvoiceEditorDialogState extends State<_InvoiceEditorDialog> {
         ),
         FilledButton(
           onPressed: _save,
-          child: Text(widget.review ? tr(context, 'saveInvoice') : tr(context, 'save')),
+          child: Text(
+            widget.review ? tr(context, 'saveInvoice') : tr(context, 'save'),
+          ),
         ),
       ],
     );
