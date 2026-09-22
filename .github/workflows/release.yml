@@ -19,6 +19,8 @@ jobs:
     name: Build split APKs and publish release
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      HAS_KEYSTORE: ${{ secrets.KEYSTORE_BASE64 != '' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7.0.1
@@ -42,7 +44,7 @@ jobs:
         run: flutter test
 
       - name: Configure signing keystore from secrets
-        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
+        if: ${{ env.HAS_KEYSTORE == 'true' }}
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
