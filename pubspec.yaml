@@ -1,7 +1,7 @@
 name: fatoora_lens
 description: Fatoora Lens - قارئ فواتير ZATCA مع تخزين محلي وتحليلات وتصدير.
 publish_to: "none"
-version: 1.0.5+1
+version: 1.0.6+1000006
 
 environment:
   sdk: ">=3.10.0 <4.0.0"

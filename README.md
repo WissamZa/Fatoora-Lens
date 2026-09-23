@@ -28,6 +28,13 @@ flutter build apk --release --split-per-abi --tree-shake-icons \
   --obfuscate --split-debug-info=build/symbols
 ```
 
+The APK version is read from the nearest `vMAJOR.MINOR.PATCH` Git tag. To build
+the release version explicitly, set `RELEASE_TAG`, for example:
+
+```bash
+RELEASE_TAG=v1.0.6 flutter build apk --release --split-per-abi
+```
+
 يستخدم البناء `split-per-abi` لتقليل حجم كل APK، وML Kit غير المضمن لتقليل حجم التطبيق الأساسي.
 
 ## GitHub Release
