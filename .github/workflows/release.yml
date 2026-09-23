@@ -91,10 +91,18 @@ jobs:
             fi
           done
 
-          gh release create "$RELEASE_TAG" \
-            build/app/outputs/flutter-apk/*.apk \
-            --title "Fatoora Lens $RELEASE_TAG" \
-            --generate-notes
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release edit "$RELEASE_TAG" \
+              --title "Fatoora Lens $RELEASE_TAG"
+            gh release upload "$RELEASE_TAG" \
+              build/app/outputs/flutter-apk/*.apk \
+              --clobber
+          else
+            gh release create "$RELEASE_TAG" \
+              build/app/outputs/flutter-apk/*.apk \
+              --title "Fatoora Lens $RELEASE_TAG" \
+              --generate-notes
+          fi
 
       - name: Upload symbols as workflow artifact
         uses: actions/upload-artifact@v7.0.1
