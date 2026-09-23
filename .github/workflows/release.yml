@@ -115,14 +115,14 @@ jobs:
           expected_assets="${#apk_files[@]}"
           release_id=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" --jq '.id')
           assets_endpoint="repos/${GITHUB_REPOSITORY}/releases/${release_id}/assets"
-          actual_assets=$(gh api "$assets_endpoint" --paginate --jq '[.[] | select(.name | endswith(".apk"))] | length')
-          if [ "$actual_assets" -lt "$expected_assets" ]; then
-            gh release upload "$RELEASE_TAG" \
-              "${apk_files[@]}" \
-              --clobber
-          fi
-
-          actual_assets=$(gh api "$assets_endpoint" --paginate --jq '[.[] | select(.name | endswith(".apk"))] | length')
+          actual_assets=0
+          for attempt in {1..10}; do
+            actual_assets=$(gh api "$assets_endpoint" --paginate --jq '[.[] | select(.name | endswith(".apk"))] | length')
+            if [ "$actual_assets" -eq "$expected_assets" ]; then
+              break
+            fi
+            sleep 3
+          done
           if [ "$actual_assets" -ne "$expected_assets" ]; then
             echo "Expected ${expected_assets} APK release assets, found ${actual_assets}" >&2
             exit 1
