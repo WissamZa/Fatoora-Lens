@@ -21,6 +21,7 @@ jobs:
     timeout-minutes: 30
     env:
       HAS_KEYSTORE: ${{ secrets.KEYSTORE_BASE64 != '' }}
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7.0.1
@@ -39,6 +40,16 @@ jobs:
 
       - name: Install dependencies
         run: flutter pub get
+
+      - name: Validate release version
+        run: |
+          set -euo pipefail
+          app_version="${RELEASE_TAG#v}"
+          if [[ "${RELEASE_TAG}" != v* || ! "${app_version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid release tag: ${RELEASE_TAG}. Expected a tag such as v1.0.6." >&2
+            exit 1
+          fi
+          echo "Building Fatoora Lens ${app_version}"
 
       - name: Run tests
         run: flutter test
@@ -79,7 +90,7 @@ jobs:
               mv "$file" "build/app/outputs/flutter-apk/${base_name}-${RELEASE_TAG}.apk"
             fi
           done
-          
+
           gh release create "$RELEASE_TAG" \
             build/app/outputs/flutter-apk/*.apk \
             --title "Fatoora Lens $RELEASE_TAG" \
