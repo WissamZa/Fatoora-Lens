@@ -72,6 +72,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
         run: |
+          # Rename generated APK files to append the tag version
+          for file in build/app/outputs/flutter-apk/*.apk; do
+            if [ -f "$file" ]; then
+              base_name=$(basename "$file" .apk)
+              mv "$file" "build/app/outputs/flutter-apk/${base_name}-${RELEASE_TAG}.apk"
+            fi
+          done
+          
           gh release create "$RELEASE_TAG" \
             build/app/outputs/flutter-apk/*.apk \
             --title "Fatoora Lens $RELEASE_TAG" \
