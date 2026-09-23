@@ -113,20 +113,16 @@ jobs:
           fi
 
           expected_assets="${#apk_files[@]}"
-          actual_assets=$(gh release view "$RELEASE_TAG" --json assets --jq '[.assets[] | select(.name | endswith(".apk"))] | length')
+          release_id=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" --jq '.id')
+          assets_endpoint="repos/${GITHUB_REPOSITORY}/releases/${release_id}/assets"
+          actual_assets=$(gh api "$assets_endpoint" --paginate --jq '[.[] | select(.name | endswith(".apk"))] | length')
           if [ "$actual_assets" -lt "$expected_assets" ]; then
-            release_id=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" --jq '.id')
-            upload_url=$(gh api "repos/${GITHUB_REPOSITORY}/releases/${release_id}" --jq '.upload_url' | sed 's/{?name,label}//')
-            for file in "${apk_files[@]}"; do
-              file_name=$(basename "$file")
-              gh api --method POST \
-                -H "Content-Type: application/vnd.android.package-archive" \
-                --input "$file" \
-                "${upload_url}?name=${file_name}" >/dev/null
-            done
+            gh release upload "$RELEASE_TAG" \
+              "${apk_files[@]}" \
+              --clobber
           fi
 
-          actual_assets=$(gh release view "$RELEASE_TAG" --json assets --jq '[.assets[] | select(.name | endswith(".apk"))] | length')
+          actual_assets=$(gh api "$assets_endpoint" --paginate --jq '[.[] | select(.name | endswith(".apk"))] | length')
           if [ "$actual_assets" -ne "$expected_assets" ]; then
             echo "Expected ${expected_assets} APK release assets, found ${actual_assets}" >&2
             exit 1
