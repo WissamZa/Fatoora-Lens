@@ -83,6 +83,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
         run: |
+          shopt -s nullglob
+
           # Rename generated APK files to append the tag version
           for file in build/app/outputs/flutter-apk/*.apk; do
             if [ -f "$file" ]; then
@@ -90,6 +92,12 @@ jobs:
               mv "$file" "build/app/outputs/flutter-apk/${base_name}-${RELEASE_TAG}.apk"
             fi
           done
+
+          apk_files=(build/app/outputs/flutter-apk/*.apk)
+          if [ "${#apk_files[@]}" -eq 0 ]; then
+            echo "No APK files were produced" >&2
+            exit 1
+          fi
 
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release edit "$RELEASE_TAG" \
@@ -102,6 +110,26 @@ jobs:
               build/app/outputs/flutter-apk/*.apk \
               --title "Fatoora Lens $RELEASE_TAG" \
               --generate-notes
+          fi
+
+          expected_assets="${#apk_files[@]}"
+          actual_assets=$(gh release view "$RELEASE_TAG" --json assets --jq '[.assets[] | select(.name | endswith(".apk"))] | length')
+          if [ "$actual_assets" -lt "$expected_assets" ]; then
+            release_id=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" --jq '.id')
+            upload_url=$(gh api "repos/${GITHUB_REPOSITORY}/releases/${release_id}" --jq '.upload_url' | sed 's/{?name,label}//')
+            for file in "${apk_files[@]}"; do
+              file_name=$(basename "$file")
+              gh api --method POST \
+                -H "Content-Type: application/vnd.android.package-archive" \
+                --input "$file" \
+                "${upload_url}?name=${file_name}" >/dev/null
+            done
+          fi
+
+          actual_assets=$(gh release view "$RELEASE_TAG" --json assets --jq '[.assets[] | select(.name | endswith(".apk"))] | length')
+          if [ "$actual_assets" -ne "$expected_assets" ]; then
+            echo "Expected ${expected_assets} APK release assets, found ${actual_assets}" >&2
+            exit 1
           fi
 
       - name: Upload symbols as workflow artifact
