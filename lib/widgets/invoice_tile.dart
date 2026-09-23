@@ -113,6 +113,16 @@ class InvoiceTile extends StatelessWidget {
                             color: theme.colorScheme.onSurfaceVariant,
                           ),
                         ),
+                        if (invoice.invoiceNumber.isNotEmpty)
+                          Text(
+                            '${tr(context, 'invoiceNumber')}: ${invoice.invoiceNumber}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.primary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                       ],
                     ),
                   ),
@@ -390,6 +400,26 @@ class _InvoiceDetailsSheet extends StatelessWidget {
                           child: Icon(Icons.copy_rounded, size: 16, color: theme.colorScheme.primary),
                         ),
                       ],
+                    ),
+                  ],
+                ),
+              ),
+
+            if (invoice.invoiceNumber.isNotEmpty)
+              Container(
+                margin: const EdgeInsets.only(bottom: 14),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primaryContainer.withValues(alpha: 0.35),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(tr(context, 'invoiceNumber'), style: theme.textTheme.bodyMedium),
+                    Text(
+                      invoice.invoiceNumber,
+                      style: const TextStyle(fontWeight: FontWeight.w700, fontFamily: 'monospace'),
                     ),
                   ],
                 ),

@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import '../l10n.dart';
 import '../models/shop.dart';
@@ -23,6 +24,24 @@ class AnalysisTab extends StatelessWidget {
     final tax = shops.fold<double>(0, (sum, shop) => sum + shop.totalTax);
     final count = shops.fold<int>(0, (sum, shop) => sum + shop.invoices.length);
     final max = chartShops.fold<double>(0, (value, shop) => math.max(value, shop.totalAmount));
+    final allInvoices = shops.expand((shop) => shop.invoices).toList();
+    final monthly = <DateTime, double>{};
+    for (final invoice in allInvoices) {
+      final month = DateTime(invoice.issuedAt.year, invoice.issuedAt.month);
+      monthly[month] = (monthly[month] ?? 0) + invoice.totalAmount;
+    }
+    final monthlyEntries = monthly.entries.toList()..sort((a, b) => a.key.compareTo(b.key));
+    final monthlyMax = monthlyEntries.fold<double>(0, (value, entry) => math.max(value, entry.value));
+    final colors = [
+      Theme.of(context).colorScheme.primary,
+      Theme.of(context).colorScheme.tertiary,
+      Colors.orange.shade700,
+      Colors.indigo.shade400,
+      Colors.pink.shade400,
+      Colors.cyan.shade700,
+      Colors.brown.shade400,
+      Colors.deepPurple.shade400,
+    ];
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 100),
@@ -94,6 +113,129 @@ class AnalysisTab extends StatelessWidget {
                       ],
                     ),
                   ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 14),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 18, 18, 14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(tr(context, 'monthlyTrend'), style: const TextStyle(fontWeight: FontWeight.w800)),
+                const SizedBox(height: 22),
+                SizedBox(
+                  height: 220,
+                  child: monthlyEntries.length < 2
+                      ? Center(child: Text(tr(context, 'noData')))
+                      : LineChart(
+                          LineChartData(
+                            minX: 0,
+                            maxX: (monthlyEntries.length - 1).toDouble(),
+                            minY: 0,
+                            maxY: monthlyMax == 0 ? 10 : monthlyMax * 1.25,
+                            gridData: const FlGridData(show: true, drawVerticalLine: false),
+                            borderData: FlBorderData(show: false),
+                            lineTouchData: const LineTouchData(enabled: true),
+                            titlesData: FlTitlesData(
+                              topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                              rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                              leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 42)),
+                              bottomTitles: AxisTitles(
+                                sideTitles: SideTitles(
+                                  showTitles: true,
+                                  reservedSize: 32,
+                                  getTitlesWidget: (value, meta) {
+                                    final index = value.round();
+                                    if (index < 0 || index >= monthlyEntries.length) return const SizedBox.shrink();
+                                    return SideTitleWidget(
+                                      meta: meta,
+                                      child: Text(
+                                        DateFormat('MM/yy').format(monthlyEntries[index].key),
+                                        style: const TextStyle(fontSize: 9),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ),
+                            lineBarsData: [
+                              LineChartBarData(
+                                spots: [
+                                  for (var index = 0; index < monthlyEntries.length; index++)
+                                    FlSpot(index.toDouble(), monthlyEntries[index].value),
+                                ],
+                                isCurved: true,
+                                barWidth: 3,
+                                color: Theme.of(context).colorScheme.primary,
+                                dotData: const FlDotData(show: true),
+                                belowBarData: BarAreaData(
+                                  show: true,
+                                  color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 14),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 18, 18, 14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(tr(context, 'shopShare'), style: const TextStyle(fontWeight: FontWeight.w800)),
+                const SizedBox(height: 18),
+                Row(
+                  children: [
+                    SizedBox(
+                      width: 190,
+                      height: 190,
+                      child: PieChart(
+                        PieChartData(
+                          centerSpaceRadius: 38,
+                          sectionsSpace: 2,
+                          sections: [
+                            for (var index = 0; index < chartShops.length; index++)
+                              PieChartSectionData(
+                                value: chartShops[index].totalAmount,
+                                title: total == 0 ? '0%' : '${(chartShops[index].totalAmount / total * 100).round()}%',
+                                color: colors[index % colors.length],
+                                radius: 72,
+                                titleStyle: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          for (var index = 0; index < chartShops.length; index++)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: Row(
+                                children: [
+                                  Container(width: 10, height: 10, decoration: BoxDecoration(color: colors[index % colors.length], shape: BoxShape.circle)),
+                                  const SizedBox(width: 7),
+                                  Expanded(child: Text(chartShops[index].name, maxLines: 1, overflow: TextOverflow.ellipsis)),
+                                ],
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),

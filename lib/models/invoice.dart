@@ -7,6 +7,7 @@ class Invoice {
     required this.totalAmount,
     required this.vatAmount,
     required this.rawPayload,
+    this.invoiceNumber = '',
     this.note = '',
     this.imagePath,
     this.createdAt,
@@ -19,6 +20,7 @@ class Invoice {
   final double totalAmount;
   final double vatAmount;
   final String rawPayload;
+  final String invoiceNumber;
   final String note;
   final String? imagePath;
   final DateTime? createdAt;
@@ -28,6 +30,7 @@ class Invoice {
     String? vatNumber,
     double? totalAmount,
     double? vatAmount,
+    String? invoiceNumber,
     String? note,
     String? imagePath,
     bool clearImage = false,
@@ -39,6 +42,7 @@ class Invoice {
         totalAmount: totalAmount ?? this.totalAmount,
         vatAmount: vatAmount ?? this.vatAmount,
         rawPayload: rawPayload,
+        invoiceNumber: invoiceNumber ?? this.invoiceNumber,
         note: note ?? this.note,
         imagePath: clearImage ? null : (imagePath ?? this.imagePath),
         createdAt: createdAt,
@@ -52,6 +56,7 @@ class Invoice {
         'total_amount': totalAmount,
         'vat_amount': vatAmount,
         'raw_payload': rawPayload,
+        'invoice_number': invoiceNumber,
         'note': note,
         'image_path': imagePath,
         'created_at': (createdAt ?? DateTime.now()).toIso8601String(),
@@ -65,6 +70,7 @@ class Invoice {
         totalAmount: (map['total_amount'] as num).toDouble(),
         vatAmount: (map['vat_amount'] as num).toDouble(),
         rawPayload: map['raw_payload'] as String,
+        invoiceNumber: (map['invoice_number'] as String?) ?? '',
         note: (map['note'] as String?) ?? '',
         imagePath: map['image_path'] as String?,
         createdAt: DateTime.tryParse(map['created_at'] as String? ?? ''),

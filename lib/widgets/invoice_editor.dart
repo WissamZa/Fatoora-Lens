@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import '../l10n.dart';
 import '../models/invoice.dart';
 import '../services/zatca_qr_parser.dart';
+import '../screens/scanner_screen.dart';
 import 'sar_symbol.dart';
 
 Future<Invoice?> showInvoiceEditor(
@@ -52,6 +53,7 @@ class _InvoiceEditorDialogState extends State<_InvoiceEditorDialog> {
   late final TextEditingController _vatController;
   late final TextEditingController _amountController;
   late final TextEditingController _taxController;
+  late final TextEditingController _invoiceNumberController;
   late final TextEditingController _noteController;
   String? _imagePath;
 
@@ -67,6 +69,7 @@ class _InvoiceEditorDialogState extends State<_InvoiceEditorDialog> {
     _taxController = TextEditingController(
       text: invoice.vatAmount.toStringAsFixed(2),
     );
+    _invoiceNumberController = TextEditingController(text: invoice.invoiceNumber);
     _noteController = TextEditingController(text: invoice.note);
     _imagePath = invoice.imagePath;
   }
@@ -77,6 +80,7 @@ class _InvoiceEditorDialogState extends State<_InvoiceEditorDialog> {
     _vatController.dispose();
     _amountController.dispose();
     _taxController.dispose();
+    _invoiceNumberController.dispose();
     _noteController.dispose();
     super.dispose();
   }
@@ -207,6 +211,7 @@ class _InvoiceEditorDialogState extends State<_InvoiceEditorDialog> {
       widget.invoice.copyWith(
         sellerName: seller,
         vatNumber: _vatController.text.trim(),
+        invoiceNumber: _invoiceNumberController.text.trim(),
         totalAmount: amount,
         vatAmount: tax,
         note: _noteController.text.trim(),
@@ -214,6 +219,16 @@ class _InvoiceEditorDialogState extends State<_InvoiceEditorDialog> {
         clearImage: _imagePath == null,
       ),
     );
+  }
+
+  Future<void> _scanInvoiceNumber() async {
+    final value = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (_) => const ScannerScreen(scanInvoiceNumber: true),
+      ),
+    );
+    if (!mounted || value == null || value.trim().isEmpty) return;
+    setState(() => _invoiceNumberController.text = value.trim());
   }
 
   @override
@@ -246,6 +261,20 @@ class _InvoiceEditorDialogState extends State<_InvoiceEditorDialog> {
                 prefixIcon: const Icon(Icons.pin_outlined),
               ),
               keyboardType: TextInputType.number,
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _invoiceNumberController,
+              decoration: InputDecoration(
+                labelText: tr(context, 'invoiceNumber'),
+                prefixIcon: const Icon(Icons.confirmation_number_outlined),
+                suffixIcon: IconButton(
+                  tooltip: tr(context, 'scanInvoiceNumber'),
+                  onPressed: _scanInvoiceNumber,
+                  icon: const Icon(Icons.barcode_reader),
+                ),
+              ),
+              textInputAction: TextInputAction.next,
             ),
             const SizedBox(height: 10),
             Row(

@@ -47,6 +47,8 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _loading = true;
   bool _busy = false;
   String? _loadError;
+  String? _amountFilterOperator;
+  double? _amountFilterValue;
 
   @override
   void initState() {
@@ -240,6 +242,71 @@ class _HomeScreenState extends State<HomeScreen> {
     await _runBusy(() => ExportService.sharePdf(selected, english: english));
   }
 
+  Future<void> _showAmountFilter() async {
+    var operator = _amountFilterOperator ?? '>=';
+    final controller = TextEditingController(
+      text: _amountFilterValue?.toStringAsFixed(2) ?? '',
+    );
+    final result = await showDialog<Map<String, Object?>>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(tr(context, 'amountFilter')),
+        content: StatefulBuilder(
+          builder: (context, setDialogState) => Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DropdownButtonFormField<String>(
+                initialValue: operator,
+                decoration: InputDecoration(labelText: tr(context, 'amountCondition')),
+                items: [
+                  ('>', 'greaterThan'),
+                  ('>=', 'greaterThanOrEqual'),
+                  ('=', 'equalTo'),
+                  ('<=', 'lessThanOrEqual'),
+                  ('<', 'lessThan'),
+                ].map((item) => DropdownMenuItem(
+                  value: item.$1,
+                  child: Text(tr(context, item.$2)),
+                )).toList(),
+                onChanged: (value) => setDialogState(() => operator = value ?? '>='),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: controller,
+                autofocus: true,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(
+                  labelText: tr(context, 'amount'),
+                  prefixIcon: const Icon(Icons.payments_outlined),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text(tr(context, 'cancel')),
+          ),
+          FilledButton(
+            onPressed: () {
+              final amount = double.tryParse(controller.text.trim().replaceAll(',', ''));
+              if (amount == null) return;
+              Navigator.pop(dialogContext, {'operator': operator, 'value': amount});
+            },
+            child: Text(tr(context, 'applyFilter')),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (!mounted || result == null) return;
+    setState(() {
+      _amountFilterOperator = result['operator'] as String;
+      _amountFilterValue = result['value'] as double;
+    });
+  }
+
   Future<void> _runBusy(Future<void> Function() action) async {
     final errorText = tr(context, 'error');
     setState(() => _busy = true);
@@ -350,11 +417,23 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildHomeTab() {
     final query = _searchController.text.trim().toLowerCase();
     final filtered = _invoices.where((invoice) {
-      if (query.isEmpty) return true;
-      return invoice.sellerName.toLowerCase().contains(query) ||
-          invoice.vatNumber.toLowerCase().contains(query);
+      final matchesText = query.isEmpty ||
+          invoice.sellerName.toLowerCase().contains(query) ||
+          invoice.vatNumber.toLowerCase().contains(query) ||
+          invoice.invoiceNumber.toLowerCase().contains(query);
+      final filterValue = _amountFilterValue;
+      final matchesAmount = filterValue == null || switch (_amountFilterOperator) {
+        '>' => invoice.totalAmount > filterValue,
+        '>=' => invoice.totalAmount >= filterValue,
+        '=' => (invoice.totalAmount - filterValue).abs() < 0.005,
+        '<=' => invoice.totalAmount <= filterValue,
+        '<' => invoice.totalAmount < filterValue,
+        _ => true,
+      };
+      return matchesText && matchesAmount;
     }).toList();
-    final shown = query.isEmpty ? filtered.take(5).toList() : filtered;
+    final hasFilter = query.isNotEmpty || _amountFilterValue != null;
+    final shown = hasFilter ? filtered : filtered.take(5).toList();
     final total = _invoices.fold<double>(
       0,
       (sum, item) => sum + item.totalAmount,
@@ -401,17 +480,47 @@ class _HomeScreenState extends State<HomeScreen> {
             decoration: InputDecoration(
               prefixIcon: const Icon(Icons.search_rounded),
               hintText: tr(context, 'search'),
-              suffixIcon: _searchController.text.isEmpty
-                  ? null
-                  : IconButton(
+              suffixIcon: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    tooltip: tr(context, 'amountFilter'),
+                    onPressed: _showAmountFilter,
+                    icon: Icon(
+                      Icons.tune_rounded,
+                      color: _amountFilterValue == null
+                          ? null
+                          : Theme.of(context).colorScheme.primary,
+                    ),
+                  ),
+                  if (_searchController.text.isNotEmpty)
+                    IconButton(
                       onPressed: () {
                         _searchController.clear();
                         setState(() {});
                       },
                       icon: const Icon(Icons.clear_rounded),
                     ),
+                ],
+              ),
             ),
           ),
+          if (_amountFilterValue != null) ...[
+            const SizedBox(height: 8),
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: InputChip(
+                avatar: const Icon(Icons.filter_alt_outlined, size: 17),
+                label: Text(
+                  '${tr(context, 'filterActive')}: ${_amountFilterOperator!} ${_amountFilterValue!.toStringAsFixed(2)}',
+                ),
+                onDeleted: () => setState(() {
+                  _amountFilterOperator = null;
+                  _amountFilterValue = null;
+                }),
+              ),
+            ),
+          ],
           const SizedBox(height: 14),
           Row(
             children: [
@@ -442,7 +551,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const SizedBox(height: 22),
           Text(
-            query.isEmpty
+            !hasFilter
                 ? tr(context, 'latestInvoices')
                 : tr(context, 'allInvoices'),
             style: Theme.of(
@@ -455,7 +564,7 @@ class _HomeScreenState extends State<HomeScreen> {
               padding: const EdgeInsets.symmetric(vertical: 40),
               child: Center(
                 child: Text(
-                  query.isEmpty
+                  !hasFilter
                       ? tr(context, 'noInvoices')
                       : tr(context, 'noSearchResults'),
                 ),

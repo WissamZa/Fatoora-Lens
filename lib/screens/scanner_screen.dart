@@ -4,18 +4,37 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import '../l10n.dart';
 
 class ScannerScreen extends StatefulWidget {
-  const ScannerScreen({super.key});
+  const ScannerScreen({this.scanInvoiceNumber = false, super.key});
+
+  final bool scanInvoiceNumber;
 
   @override
   State<ScannerScreen> createState() => _ScannerScreenState();
 }
 
 class _ScannerScreenState extends State<ScannerScreen> {
-  final MobileScannerController _controller = MobileScannerController(
-    detectionSpeed: DetectionSpeed.noDuplicates,
-    formats: [BarcodeFormat.qrCode],
-  );
+  late final MobileScannerController _controller;
   bool _handled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = MobileScannerController(
+      detectionSpeed: DetectionSpeed.noDuplicates,
+      formats: widget.scanInvoiceNumber
+          ? [
+              BarcodeFormat.code128,
+              BarcodeFormat.code39,
+              BarcodeFormat.ean13,
+              BarcodeFormat.ean8,
+              BarcodeFormat.upcA,
+              BarcodeFormat.upcE,
+              BarcodeFormat.itf14,
+              BarcodeFormat.codabar,
+            ]
+          : [BarcodeFormat.qrCode],
+    );
+  }
 
   Future<void> _onDetect(BarcodeCapture capture) async {
     if (_handled) return;
@@ -35,7 +54,9 @@ class _ScannerScreenState extends State<ScannerScreen> {
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
-        title: Text(tr(context, 'scanTitle')),
+        title: Text(
+          tr(context, widget.scanInvoiceNumber ? 'scanInvoiceNumber' : 'scanTitle'),
+        ),
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
         actions: [
@@ -70,7 +91,10 @@ class _ScannerScreenState extends State<ScannerScreen> {
             right: 24,
             bottom: 32,
             child: Text(
-              tr(context, 'cameraScanHint'),
+              tr(
+                context,
+                widget.scanInvoiceNumber ? 'invoiceNumberScanHint' : 'cameraScanHint',
+              ),
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     color: Colors.white,

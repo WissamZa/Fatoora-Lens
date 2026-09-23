@@ -13,12 +13,13 @@ import 'zatca_qr_parser.dart';
 class ExportService {
   static Future<void> shareCsv(List<Invoice> invoices, {required bool english}) async {
     final headers = english
-        ? ['Shop', 'VAT number', 'Date', 'Time', 'Amount', 'Tax', 'Note']
-        : ['اسم المحل', 'الرقم الضريبي', 'التاريخ', 'الوقت', 'المبلغ', 'الضريبة', 'ملاحظة'];
+        ? ['Shop', 'Invoice no.', 'VAT number', 'Date', 'Time', 'Amount', 'Tax', 'Note']
+        : ['اسم المحل', 'رقم الفاتورة', 'الرقم الضريبي', 'التاريخ', 'الوقت', 'المبلغ', 'الضريبة', 'ملاحظة'];
     final rows = <List<Object?>>[
       headers,
       ...invoices.map((invoice) => [
             invoice.sellerName,
+            invoice.invoiceNumber,
             invoice.vatNumber,
             ZatcaQrParser.formatDate(invoice.issuedAt),
             ZatcaQrParser.formatTime(invoice.issuedAt),
@@ -54,20 +55,29 @@ class ExportService {
     final fontData = await rootBundle.load('assets/fonts/NotoSansArabic-Regular.ttf');
     final font = pw.Font.ttf(fontData.buffer.asByteData());
     final document = pw.Document(
-      theme: pw.ThemeData.withFont(base: font),
+      // Noto Sans Arabic in the app intentionally contains Arabic glyphs;
+      // Helvetica is kept as a fallback for Latin shop names and headers.
+      theme: pw.ThemeData.withFont(
+        base: font,
+        bold: font,
+        fontFallback: [pw.Font.helvetica()],
+      ),
     );
     final title = english ? 'Zakat invoices report' : 'تقرير فواتير الزكاة';
     final headers = english
         ? ['Shop', 'VAT number', 'Date', 'Time', 'Amount', 'Tax']
-        : ['المحل', 'الرقم الضريبي', 'التاريخ', 'الوقت', 'المبلغ', 'الضريبة'];
+        : ['المحل', 'رقم الفاتورة', 'الرقم الضريبي', 'التاريخ', 'الوقت', 'المبلغ', 'الضريبة'];
+    final englishHeaders = ['Shop', 'Invoice no.', 'VAT number', 'Date', 'Time', 'Amount', 'Tax'];
+    final resolvedHeaders = english ? englishHeaders : headers;
     final data = invoices
         .map((invoice) => [
-              invoice.sellerName,
-              invoice.vatNumber,
-              ZatcaQrParser.formatDate(invoice.issuedAt),
-              ZatcaQrParser.formatTime(invoice.issuedAt),
-              invoice.totalAmount.toStringAsFixed(2),
-              invoice.vatAmount.toStringAsFixed(2),
+              _pdfCell(invoice.sellerName),
+              _pdfCell(invoice.invoiceNumber.isEmpty ? '-' : invoice.invoiceNumber),
+              _pdfCell(invoice.vatNumber.isEmpty ? '-' : invoice.vatNumber),
+              _pdfCell(ZatcaQrParser.formatDate(invoice.issuedAt)),
+              _pdfCell(ZatcaQrParser.formatTime(invoice.issuedAt)),
+              _pdfCell(invoice.totalAmount.toStringAsFixed(2), align: pw.Alignment.centerRight),
+              _pdfCell(invoice.vatAmount.toStringAsFixed(2), align: pw.Alignment.centerRight),
             ])
         .toList();
     final total = invoices.fold<double>(0, (sum, item) => sum + item.totalAmount);
@@ -92,17 +102,31 @@ class ExportService {
         ),
         build: (context) => [
           pw.TableHelper.fromTextArray(
-            headers: headers,
+            headers: resolvedHeaders,
             data: data,
-            headerStyle: const pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white),
+            headerStyle: const pw.TextStyle(
+              fontWeight: pw.FontWeight.bold,
+              color: PdfColors.white,
+              fontSize: 8,
+            ),
+            cellStyle: const pw.TextStyle(fontSize: 8),
             headerDecoration: const pw.BoxDecoration(color: PdfColors.teal700),
-            cellPadding: const pw.EdgeInsets.all(7),
+            columnWidths: {
+              0: const pw.FixedColumnWidth(140),
+              1: const pw.FixedColumnWidth(74),
+              2: const pw.FixedColumnWidth(100),
+              3: const pw.FixedColumnWidth(58),
+              4: const pw.FixedColumnWidth(62),
+              5: const pw.FixedColumnWidth(53),
+              6: const pw.FixedColumnWidth(52),
+            },
+            cellPadding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 6),
             border: pw.TableBorder.all(color: PdfColors.grey400),
             cellAlignment: pw.Alignment.center,
           ),
           pw.SizedBox(height: 18),
           pw.Text(
-            '${english ? 'Total' : 'الإجمالي'}: ${total.toStringAsFixed(2)} $currency   •   ${english ? 'Tax' : 'الضريبة'}: ${tax.toStringAsFixed(2)} $currency',
+            '${english ? 'Total' : 'الإجمالي'}: ${total.toStringAsFixed(2)} $currency   |   ${english ? 'Tax' : 'الضريبة'}: ${tax.toStringAsFixed(2)} $currency',
             style: const pw.TextStyle(fontWeight: pw.FontWeight.bold),
           ),
         ],
@@ -115,6 +139,19 @@ class ExportService {
       'fatoora_lens_$stamp.pdf',
       'application/pdf',
       title,
+    );
+  }
+
+  static pw.Widget _pdfCell(String value, {pw.Alignment align = pw.Alignment.center}) {
+    final hasArabic = RegExp(r'[\u0600-\u06ff]').hasMatch(value);
+    return pw.FittedBox(
+      fit: pw.BoxFit.scaleDown,
+      alignment: align,
+      child: pw.Text(
+        value,
+        textAlign: pw.TextAlign.center,
+        textDirection: hasArabic ? pw.TextDirection.rtl : pw.TextDirection.ltr,
+      ),
     );
   }
 
