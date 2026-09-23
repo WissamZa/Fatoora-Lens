@@ -23,7 +23,7 @@ class DatabaseService {
     final path = databasePath ?? '${directory!.path}/zakat_invoices.db';
     try {
       final options = OpenDatabaseOptions(
-        version: 3,
+        version: 4,
         onCreate: (database, version) => _ensureSchema(database),
         onUpgrade: (database, oldVersion, newVersion) =>
             _ensureSchema(database),
@@ -53,6 +53,7 @@ class DatabaseService {
         total_amount REAL NOT NULL,
         vat_amount REAL NOT NULL,
         raw_payload TEXT NOT NULL,
+        invoice_number TEXT NOT NULL DEFAULT '',
         note TEXT NOT NULL DEFAULT '',
         image_path TEXT,
         created_at TEXT NOT NULL
@@ -69,6 +70,12 @@ class DatabaseService {
     final hasImagePath = columns.any((row) => row['name'] == 'image_path');
     if (!hasImagePath) {
       await database.execute('ALTER TABLE invoices ADD COLUMN image_path TEXT');
+    }
+    final hasInvoiceNumber = columns.any((row) => row['name'] == 'invoice_number');
+    if (!hasInvoiceNumber) {
+      await database.execute(
+        "ALTER TABLE invoices ADD COLUMN invoice_number TEXT NOT NULL DEFAULT ''",
+      );
     }
     await database.execute(
       'CREATE INDEX IF NOT EXISTS idx_invoices_seller ON invoices(seller_name)',
@@ -246,7 +253,7 @@ class DatabaseService {
     final invoices = await getInvoices();
     final shops = await _db.query('shops');
     return jsonEncode({
-      'schemaVersion': 3,
+      'schemaVersion': 4,
       'createdAt': DateTime.now().toIso8601String(),
       'invoices': invoices.map((invoice) => invoice.toMap()).toList(),
       'shops': shops,
