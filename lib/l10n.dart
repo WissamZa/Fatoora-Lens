@@ -107,6 +107,21 @@ class AppL10n {
     'noImageAttached': 'لا توجد صورة مرفقة',
     'hasImage': 'مرفق صورة',
     'copied': 'تم النسخ',
+    'showAll': 'عرض الكل',
+    'sort': 'الترتيب',
+    'sortNewest': 'الأحدث أولاً',
+    'sortOldest': 'الأقدم أولاً',
+    'sortAmountHigh': 'المبلغ: من الأعلى إلى الأدنى',
+    'sortAmountLow': 'المبلغ: من الأدنى إلى الأعلى',
+    'sortShopName': 'حسب اسم المحل',
+    'sellerNameEn': 'اسم المحل بالإنجليزية (اختياري)',
+    'cropImage': 'قص الصورة',
+    'tapToExpand': 'اضغط لعرض الرسم بالكامل',
+    'aboutApp': 'حول التطبيق',
+    'developer': 'المطور',
+    'version': 'الإصدار',
+    'contact': 'للتواصل',
+    'close': 'إغلاق',
   };
 
   static const _en = <String, String>{
@@ -207,6 +222,21 @@ class AppL10n {
     'noImageAttached': 'No image attached',
     'hasImage': 'Image attached',
     'copied': 'Copied',
+    'showAll': 'Show all',
+    'sort': 'Sort',
+    'sortNewest': 'Newest first',
+    'sortOldest': 'Oldest first',
+    'sortAmountHigh': 'Amount: high to low',
+    'sortAmountLow': 'Amount: low to high',
+    'sortShopName': 'By shop name',
+    'sellerNameEn': 'Shop name in English (optional)',
+    'cropImage': 'Crop image',
+    'tapToExpand': 'Tap to view the full chart',
+    'aboutApp': 'About the app',
+    'developer': 'Developer',
+    'version': 'Version',
+    'contact': 'Contact',
+    'close': 'Close',
   };
 }
 

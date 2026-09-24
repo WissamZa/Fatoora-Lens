@@ -11,6 +11,10 @@ import '../models/invoice.dart';
 import 'zatca_qr_parser.dart';
 
 class ExportService {
+  /// Unified base font size for all body text; every cell wraps its content
+  /// in a FittedBox so longer text scales down to fit instead of clipping.
+  static const double _pdfFontSize = 8;
+
   static Future<void> shareCsv(List<Invoice> invoices, {required bool english}) async {
     final headers = english
         ? ['Shop', 'Invoice no.', 'VAT number', 'Date', 'Time', 'Amount', 'Tax', 'Note']
@@ -48,12 +52,15 @@ class ExportService {
     );
   }
 
-  static Future<void> sharePdf(
+  /// Builds the PDF report; separated from sharing so it can be tested.
+  static Future<pw.Document> buildPdf(
     List<Invoice> invoices, {
     required bool english,
   }) async {
     final fontData = await rootBundle.load('assets/fonts/NotoSansArabic-Regular.ttf');
     final font = pw.Font.ttf(fontData.buffer.asByteData());
+    // The official SAR symbol is a path-only SVG, drawn directly by the pdf package.
+    final sarSvg = await rootBundle.loadString('assets/icons/sar_symbol.svg');
     final document = pw.Document(
       // Noto Sans Arabic in the app intentionally contains Arabic glyphs;
       // Helvetica is kept as a fallback for Latin shop names and headers.
@@ -71,18 +78,21 @@ class ExportService {
     final resolvedHeaders = english ? englishHeaders : headers;
     final data = invoices
         .map((invoice) => [
-              _pdfCell(invoice.sellerName),
+              _shopCell(invoice),
               _pdfCell(invoice.invoiceNumber.isEmpty ? '-' : invoice.invoiceNumber),
               _pdfCell(invoice.vatNumber.isEmpty ? '-' : invoice.vatNumber),
               _pdfCell(ZatcaQrParser.formatDate(invoice.issuedAt)),
               _pdfCell(ZatcaQrParser.formatTime(invoice.issuedAt)),
-              _pdfCell(invoice.totalAmount.toStringAsFixed(2), align: pw.Alignment.centerRight),
-              _pdfCell(invoice.vatAmount.toStringAsFixed(2), align: pw.Alignment.centerRight),
+              _amountCell(invoice.totalAmount, sarSvg),
+              _amountCell(invoice.vatAmount, sarSvg),
             ])
         .toList();
     final total = invoices.fold<double>(0, (sum, item) => sum + item.totalAmount);
     final tax = invoices.fold<double>(0, (sum, item) => sum + item.vatAmount);
-    final currency = english ? 'SAR' : 'ر.س';
+    const boldStyle = pw.TextStyle(
+      fontWeight: pw.FontWeight.bold,
+      fontSize: _pdfFontSize,
+    );
 
     document.addPage(
       pw.MultiPage(
@@ -109,29 +119,48 @@ class ExportService {
               color: PdfColors.white,
               fontSize: 8,
             ),
-            cellStyle: const pw.TextStyle(fontSize: 8),
+            cellStyle: const pw.TextStyle(fontSize: _pdfFontSize),
             headerDecoration: const pw.BoxDecoration(color: PdfColors.teal700),
             columnWidths: {
               0: const pw.FixedColumnWidth(140),
-              1: const pw.FixedColumnWidth(74),
-              2: const pw.FixedColumnWidth(100),
-              3: const pw.FixedColumnWidth(58),
-              4: const pw.FixedColumnWidth(62),
-              5: const pw.FixedColumnWidth(53),
-              6: const pw.FixedColumnWidth(52),
+              1: const pw.FixedColumnWidth(72),
+              2: const pw.FixedColumnWidth(96),
+              3: const pw.FixedColumnWidth(56),
+              4: const pw.FixedColumnWidth(60),
+              5: const pw.FixedColumnWidth(60),
+              6: const pw.FixedColumnWidth(55),
             },
             cellPadding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 6),
             border: pw.TableBorder.all(color: PdfColors.grey400),
             cellAlignment: pw.Alignment.center,
           ),
           pw.SizedBox(height: 18),
-          pw.Text(
-            '${english ? 'Total' : 'الإجمالي'}: ${total.toStringAsFixed(2)} $currency   |   ${english ? 'Tax' : 'الضريبة'}: ${tax.toStringAsFixed(2)} $currency',
-            style: const pw.TextStyle(fontWeight: pw.FontWeight.bold),
+          pw.Row(
+            mainAxisSize: pw.MainAxisSize.min,
+            crossAxisAlignment: pw.CrossAxisAlignment.center,
+            children: [
+              pw.Text('${english ? 'Total' : 'الإجمالي'}: ', style: boldStyle),
+              pw.Text(total.toStringAsFixed(2), style: boldStyle),
+              _sarSymbol(sarSvg, 9),
+              pw.SizedBox(width: 18),
+              pw.Text('${english ? 'Tax' : 'الضريبة'}: ', style: boldStyle),
+              pw.Text(tax.toStringAsFixed(2), style: boldStyle),
+              _sarSymbol(sarSvg, 9),
+            ],
           ),
         ],
       ),
     );
+
+    return document;
+  }
+
+  static Future<void> sharePdf(
+    List<Invoice> invoices, {
+    required bool english,
+  }) async {
+    final document = await buildPdf(invoices, english: english);
+    final title = english ? 'Zakat invoices report' : 'تقرير فواتير الزكاة';
 
     final stamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
     await _shareBytes(
@@ -143,15 +172,68 @@ class ExportService {
   }
 
   static pw.Widget _pdfCell(String value, {pw.Alignment align = pw.Alignment.center}) {
-    final hasArabic = RegExp(r'[\u0600-\u06ff]').hasMatch(value);
     return pw.FittedBox(
       fit: pw.BoxFit.scaleDown,
       alignment: align,
-      child: pw.Text(
-        value,
-        textAlign: pw.TextAlign.center,
-        textDirection: hasArabic ? pw.TextDirection.rtl : pw.TextDirection.ltr,
+      child: _bidiText(value),
+    );
+  }
+
+  /// Arabic shop name on the first line with the English name under it when available.
+  static pw.Widget _shopCell(Invoice invoice) {
+    final englishName = invoice.sellerNameEn.trim();
+    if (englishName.isEmpty) return _pdfCell(invoice.sellerName);
+    return pw.FittedBox(
+      fit: pw.BoxFit.scaleDown,
+      alignment: pw.Alignment.center,
+      child: pw.Column(
+        mainAxisSize: pw.MainAxisSize.min,
+        children: [
+          _bidiText(invoice.sellerName, fontWeight: pw.FontWeight.bold),
+          pw.SizedBox(height: 2),
+          _bidiText(englishName, color: PdfColors.grey700),
+        ],
       ),
+    );
+  }
+
+  static pw.Widget _amountCell(double value, String sarSvg) {
+    return pw.FittedBox(
+      fit: pw.BoxFit.scaleDown,
+      alignment: pw.Alignment.centerRight,
+      child: pw.Row(
+        mainAxisSize: pw.MainAxisSize.min,
+        crossAxisAlignment: pw.CrossAxisAlignment.center,
+        children: [
+          pw.Text(
+            value.toStringAsFixed(2),
+            style: const pw.TextStyle(fontSize: _pdfFontSize),
+          ),
+          pw.SizedBox(width: 3),
+          _sarSymbol(sarSvg, 9),
+        ],
+      ),
+    );
+  }
+
+  /// The SAR symbol SVG is taller than wide (1124x1256 viewBox), so the width
+  /// keeps its aspect ratio.
+  static pw.Widget _sarSymbol(String svg, double height) {
+    return pw.SvgImage(svg: svg, width: height * 0.895, height: height);
+  }
+
+  static pw.Text _bidiText(
+    String value, {
+    double fontSize = _pdfFontSize,
+    PdfColor? color,
+    pw.FontWeight? fontWeight,
+  }) {
+    final hasArabic = RegExp(r'[\u0600-\u06ff]').hasMatch(value);
+    return pw.Text(
+      value,
+      textAlign: pw.TextAlign.center,
+      textDirection: hasArabic ? pw.TextDirection.rtl : pw.TextDirection.ltr,
+      style: pw.TextStyle(fontSize: fontSize, color: color, fontWeight: fontWeight),
     );
   }
 

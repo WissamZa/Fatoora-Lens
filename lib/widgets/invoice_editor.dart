@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -50,6 +51,7 @@ class _InvoiceEditorDialog extends StatefulWidget {
 
 class _InvoiceEditorDialogState extends State<_InvoiceEditorDialog> {
   late final TextEditingController _sellerController;
+  late final TextEditingController _sellerEnController;
   late final TextEditingController _vatController;
   late final TextEditingController _amountController;
   late final TextEditingController _taxController;
@@ -62,6 +64,7 @@ class _InvoiceEditorDialogState extends State<_InvoiceEditorDialog> {
     super.initState();
     final invoice = widget.invoice;
     _sellerController = TextEditingController(text: invoice.sellerName);
+    _sellerEnController = TextEditingController(text: invoice.sellerNameEn);
     _vatController = TextEditingController(text: invoice.vatNumber);
     _amountController = TextEditingController(
       text: invoice.totalAmount.toStringAsFixed(2),
@@ -77,6 +80,7 @@ class _InvoiceEditorDialogState extends State<_InvoiceEditorDialog> {
   @override
   void dispose() {
     _sellerController.dispose();
+    _sellerEnController.dispose();
     _vatController.dispose();
     _amountController.dispose();
     _taxController.dispose();
@@ -87,9 +91,25 @@ class _InvoiceEditorDialogState extends State<_InvoiceEditorDialog> {
 
   Future<void> _pickImage(ImageSource source) async {
     try {
+      final cropTitle = tr(context, 'cropImage');
       final picker = ImagePicker();
       final picked = await picker.pickImage(source: source, imageQuality: 85);
       if (picked == null) return;
+
+      final cropped = await ImageCropper().cropImage(
+        sourcePath: picked.path,
+        uiSettings: [
+          AndroidUiSettings(
+            toolbarTitle: cropTitle,
+            toolbarColor: const Color(0xFF0A7A67),
+            toolbarWidgetColor: Colors.white,
+            activeControlsWidgetColor: const Color(0xFF159E83),
+            lockAspectRatio: false,
+          ),
+          IOSUiSettings(title: cropTitle),
+        ],
+      );
+      if (cropped == null) return;
 
       final docDir = await getApplicationDocumentsDirectory();
       final imagesDir = Directory('${docDir.path}/invoice_images');
@@ -98,7 +118,7 @@ class _InvoiceEditorDialogState extends State<_InvoiceEditorDialog> {
       }
       final filename = 'invoice_${DateTime.now().millisecondsSinceEpoch}.jpg';
       final savedFile = await File(
-        picked.path,
+        cropped.path,
       ).copy('${imagesDir.path}/$filename');
 
       if (!mounted) return;
@@ -210,6 +230,7 @@ class _InvoiceEditorDialogState extends State<_InvoiceEditorDialog> {
       context,
       widget.invoice.copyWith(
         sellerName: seller,
+        sellerNameEn: _sellerEnController.text.trim(),
         vatNumber: _vatController.text.trim(),
         invoiceNumber: _invoiceNumberController.text.trim(),
         totalAmount: amount,
@@ -252,6 +273,15 @@ class _InvoiceEditorDialogState extends State<_InvoiceEditorDialog> {
                 labelText: tr(context, 'shop'),
                 prefixIcon: const Icon(Icons.storefront_outlined),
               ),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _sellerEnController,
+              decoration: InputDecoration(
+                labelText: tr(context, 'sellerNameEn'),
+                prefixIcon: const Icon(Icons.translate_rounded),
+              ),
+              textInputAction: TextInputAction.next,
             ),
             const SizedBox(height: 10),
             TextField(

@@ -2,6 +2,7 @@ class Invoice {
   const Invoice({
     this.id,
     required this.sellerName,
+    this.sellerNameEn = '',
     required this.vatNumber,
     required this.issuedAt,
     required this.totalAmount,
@@ -15,6 +16,7 @@ class Invoice {
 
   final int? id;
   final String sellerName;
+  final String sellerNameEn;
   final String vatNumber;
   final DateTime issuedAt;
   final double totalAmount;
@@ -27,6 +29,7 @@ class Invoice {
 
   Invoice copyWith({
     String? sellerName,
+    String? sellerNameEn,
     String? vatNumber,
     double? totalAmount,
     double? vatAmount,
@@ -37,6 +40,7 @@ class Invoice {
   }) => Invoice(
         id: id,
         sellerName: sellerName ?? this.sellerName,
+        sellerNameEn: sellerNameEn ?? this.sellerNameEn,
         vatNumber: vatNumber ?? this.vatNumber,
         issuedAt: issuedAt,
         totalAmount: totalAmount ?? this.totalAmount,
@@ -51,6 +55,7 @@ class Invoice {
   Map<String, Object?> toMap() => {
         'id': id,
         'seller_name': sellerName,
+        'seller_name_en': sellerNameEn,
         'vat_number': vatNumber,
         'issued_at': issuedAt.toIso8601String(),
         'total_amount': totalAmount,
@@ -65,6 +70,7 @@ class Invoice {
   factory Invoice.fromMap(Map<String, Object?> map) => Invoice(
         id: map['id'] as int?,
         sellerName: map['seller_name'] as String,
+        sellerNameEn: (map['seller_name_en'] as String?) ?? '',
         vatNumber: (map['vat_number'] as String?) ?? '',
         issuedAt: DateTime.parse(map['issued_at'] as String),
         totalAmount: (map['total_amount'] as num).toDouble(),

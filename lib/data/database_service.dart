@@ -23,7 +23,7 @@ class DatabaseService {
     final path = databasePath ?? '${directory!.path}/zakat_invoices.db';
     try {
       final options = OpenDatabaseOptions(
-        version: 4,
+        version: 5,
         onCreate: (database, version) => _ensureSchema(database),
         onUpgrade: (database, oldVersion, newVersion) =>
             _ensureSchema(database),
@@ -48,6 +48,7 @@ class DatabaseService {
       CREATE TABLE IF NOT EXISTS invoices (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         seller_name TEXT NOT NULL,
+        seller_name_en TEXT NOT NULL DEFAULT '',
         vat_number TEXT NOT NULL DEFAULT '',
         issued_at TEXT NOT NULL,
         total_amount REAL NOT NULL,
@@ -75,6 +76,12 @@ class DatabaseService {
     if (!hasInvoiceNumber) {
       await database.execute(
         "ALTER TABLE invoices ADD COLUMN invoice_number TEXT NOT NULL DEFAULT ''",
+      );
+    }
+    final hasSellerNameEn = columns.any((row) => row['name'] == 'seller_name_en');
+    if (!hasSellerNameEn) {
+      await database.execute(
+        "ALTER TABLE invoices ADD COLUMN seller_name_en TEXT NOT NULL DEFAULT ''",
       );
     }
     await database.execute(
@@ -253,7 +260,7 @@ class DatabaseService {
     final invoices = await getInvoices();
     final shops = await _db.query('shops');
     return jsonEncode({
-      'schemaVersion': 4,
+      'schemaVersion': 5,
       'createdAt': DateTime.now().toIso8601String(),
       'invoices': invoices.map((invoice) => invoice.toMap()).toList(),
       'shops': shops,

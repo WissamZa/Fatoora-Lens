@@ -14,6 +14,7 @@ import '../services/zatca_qr_parser.dart';
 import '../widgets/invoice_editor.dart';
 import '../widgets/invoice_tile.dart';
 import '../widgets/sar_symbol.dart';
+import 'all_invoices_screen.dart';
 import 'analysis_screen.dart';
 import 'pdf_export_screen.dart';
 import 'scanner_screen.dart';
@@ -240,6 +241,18 @@ class _HomeScreenState extends State<HomeScreen> {
     );
     if (selected == null || selected.isEmpty) return;
     await _runBusy(() => ExportService.sharePdf(selected, english: english));
+  }
+
+  Future<void> _openAllInvoices() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => AllInvoicesScreen(
+          database: widget.database,
+          invoices: _invoices,
+          onChanged: _loadData,
+        ),
+      ),
+    );
   }
 
   Future<void> _showAmountFilter() async {
@@ -550,13 +563,28 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
           const SizedBox(height: 22),
-          Text(
-            !hasFilter
-                ? tr(context, 'latestInvoices')
-                : tr(context, 'allInvoices'),
-            style: Theme.of(
-              context,
-            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  !hasFilter
+                      ? tr(context, 'latestInvoices')
+                      : tr(context, 'allInvoices'),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+                ),
+              ),
+              TextButton.icon(
+                onPressed: _openAllInvoices,
+                icon: const Icon(Icons.open_in_new_rounded, size: 16),
+                label: Text(tr(context, 'showAll')),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  visualDensity: VisualDensity.compact,
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 10),
           if (shown.isEmpty)

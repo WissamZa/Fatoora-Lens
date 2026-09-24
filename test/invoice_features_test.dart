@@ -82,6 +82,73 @@ void main() {
       final cleared = invoice.copyWith(clearImage: true);
       expect(cleared.imagePath, isNull);
     });
+
+    test('supports sellerNameEn serialization and defaults to empty', () async {
+      sqfliteFfiInit();
+      final directory = await Directory.systemTemp.createTemp(
+        'fatoora_lens_test_',
+      );
+      final database = DatabaseService(
+        databasePath: '${directory.path}/database.db',
+        databaseFactory: databaseFactoryFfi,
+      );
+
+      try {
+        await database.initialize();
+
+        final bilingual = Invoice(
+          sellerName: 'سوبرماركت النخيل',
+          sellerNameEn: 'Palm Supermarket',
+          vatNumber: '300000000000003',
+          issuedAt: DateTime(2026, 3, 15),
+          totalAmount: 115,
+          vatAmount: 15,
+          rawPayload: 'payload',
+        );
+        expect(bilingual.toMap()['seller_name_en'], 'Palm Supermarket');
+        expect(Invoice.fromMap(bilingual.toMap()).sellerNameEn, 'Palm Supermarket');
+        expect(
+          bilingual.copyWith(sellerNameEn: 'Palm Market').sellerNameEn,
+          'Palm Market',
+        );
+
+        final id = await database.insertInvoice(bilingual);
+        final stored = await database.getInvoices();
+        expect(stored.single.sellerNameEn, 'Palm Supermarket');
+
+        await database.updateInvoice(
+          Invoice(
+            id: id,
+            sellerName: bilingual.sellerName,
+            sellerNameEn: 'Palm Market',
+            vatNumber: bilingual.vatNumber,
+            issuedAt: bilingual.issuedAt,
+            totalAmount: bilingual.totalAmount,
+            vatAmount: bilingual.vatAmount,
+            rawPayload: bilingual.rawPayload,
+          ),
+        );
+        final updated = await database.getInvoices();
+        expect(updated.single.sellerNameEn, 'Palm Market');
+
+        // Invoices without an English name keep loading fine.
+        final plain = Invoice(
+          sellerName: 'محل آخر',
+          vatNumber: '300000000000003',
+          issuedAt: DateTime(2026, 3, 16),
+          totalAmount: 50,
+          vatAmount: 5,
+          rawPayload: 'payload',
+        );
+        expect(plain.sellerNameEn, '');
+        await database.insertInvoice(plain);
+        final all = await database.getInvoices();
+        expect(all.where((invoice) => invoice.sellerNameEn.isEmpty).length, 1);
+      } finally {
+        await database.close();
+        await directory.delete(recursive: true);
+      }
+    });
   });
 
   group('SAR Symbol and Amount Widgets', () {
