@@ -816,7 +816,9 @@ class DatabaseService {
     final rows = await database.query(
       'invoices',
       where: 'is_deleted = 0',
-      orderBy: 'id',
+      // Deterministic order: the shop's names come from its oldest
+      // invoice, matching the pre-UUID "first scan wins" behavior.
+      orderBy: 'created_at ASC, id ASC',
     );
     final seeds = <String, _ShopSeed>{};
     for (final row in rows) {

@@ -42,16 +42,20 @@ Future<String> _createLegacyDatabase(String directoryPath) async {
     )
   ''');
 
-  Future<void> insertInvoice(Map<String, Object?> values) => database.insert(
-        'invoices',
-        {
-          'issued_at': '2026-09-01T10:00:00.000',
-          'total_amount': 115.0,
-          'vat_amount': 15.0,
-          'raw_payload': 'payload',
-          'created_at': '2026-09-01T10:00:00.000',
-        }..addAll(values),
-      );
+  var sequence = 0;
+  Future<void> insertInvoice(Map<String, Object?> values) {
+    sequence++;
+    return database.insert(
+      'invoices',
+      {
+        'issued_at': '2026-09-01T10:00:00.000',
+        'total_amount': 115.0,
+        'vat_amount': 15.0,
+        'raw_payload': 'payload',
+        'created_at': '2026-09-01T10:00:0$sequence.000',
+      }..addAll(values),
+    );
+  }
 
   // Same shop, two different seller-name spellings sharing one VAT number.
   await insertInvoice({

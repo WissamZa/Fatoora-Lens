@@ -36,6 +36,8 @@ dependencies:
   web_socket_channel: ^3.0.2
   # Sync module (M2: UUID identities + ZIP backups).
   uuid: ^4.5.1
+  # Sync module (M4: X25519 handshake + AES-256-GCM session encryption).
+  cryptography: ^2.7.0
   archive: ^4.0.0
   path: ^1.9.0
 

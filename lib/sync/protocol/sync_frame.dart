@@ -81,6 +81,15 @@ class SyncFrame {
     throw const FormatException('Unsupported frame payload type.');
   }
 
+  /// Decodes a decrypted channel payload, which may be either a control
+  /// frame (JSON text) or a blob frame (binary with header).
+  static SyncFrame decodeBytes(Uint8List bytes) {
+    if (bytes.length >= 2 && bytes[0] == _magic0 && bytes[1] == _magic1) {
+      return _decodeBlob(bytes);
+    }
+    return _decodeControl(utf8.decode(bytes));
+  }
+
   static SyncFrame _decodeControl(String text) {
     final Object? decoded;
     try {
