@@ -141,7 +141,8 @@ class SyncSessionEngine {
     this.peerHostPublicKeyB64,
     this.peerIp,
     this.peerPort,
-    this.batchSize = 100,
+    this.onProgress,
+    this.batchSize = 25,
     this.mediaChunkSize = 64 * 1024,
   });
 
@@ -185,6 +186,12 @@ class SyncSessionEngine {
 
   final int batchSize;
   final int mediaChunkSize;
+
+  /// Live progress during the session. The engine mutates and passes the
+  /// same [SyncSessionResult] it will return, so the UI can read counters
+  /// straight from it.
+  final void Function(SyncSessionResult result, String phase, String detail)?
+      onProgress;
 
   int _seq = 0;
   int get _nextSeq => ++_seq;
@@ -305,6 +312,9 @@ class SyncSessionEngine {
       },
     );
 
+    void emit(String phase, String detail) =>
+        onProgress?.call(result, phase, detail);
+
     try {
       // 1. Exchange session metadata.
       await channel.sendControl(
@@ -318,6 +328,7 @@ class SyncSessionEngine {
       final peerMeta = await metaReady.future;
       final peerId = (peerMeta['deviceId'] as String?) ?? '';
       result.peerDeviceId = peerId;
+      emit('meta', '');
       if (expectedPeerDeviceId != null && peerId != expectedPeerDeviceId) {
         throw const SyncChannelException(
           'A device other than the saved peer tried to connect.',
@@ -345,19 +356,27 @@ class SyncSessionEngine {
       final payload = await repo.buildOutboundPayload(peerId, preferences);
       result.sentInvoices = payload.invoices.length;
       result.sentProfiles = payload.profiles.length;
-      await _sendBatches('invoices', payload.invoices);
-      await _sendBatches('profiles', payload.profiles);
+      final totalOut = result.sentInvoices + result.sentProfiles;
+      await _sendBatches('invoices', payload.invoices, (sent) {
+        emit('payload', '$sent/$totalOut');
+      });
+      await _sendBatches('profiles', payload.profiles, (sent) {
+        emit('payload', '$sent/$totalOut');
+      });
       await channel.sendControl(_dataEndFrame, seq: _nextSeq);
 
       // 3. Wait for the peer's data; the chain merges it in order.
       _step = 'receive';
+      emit('receive', '${result.receivedInvoices + result.receivedProfiles}');
       await peerDataEnd.future;
       await processing;
+      emit('receive', '${result.receivedInvoices + result.receivedProfiles}');
       // Merged rows bypass insertInvoice, so the derived shops table must
       // be rebuilt before anything reads it.
       await database.refreshDerivedShops();
 
       _step = 'summary';
+      emit('summary', result.mediaNeeded.isEmpty ? '' : '${result.mediaNeeded.length}');
       // 4. Exchange summaries (the peer learns which media we lack).
       await channel.sendControl(
         _summaryFrame,
@@ -380,12 +399,21 @@ class SyncSessionEngine {
       _step = 'media';
       if (preferences.syncImages) {
         final deliver = <String>[];
+        var deliverBytes = 0;
         for (final sha in peerNeeds) {
-          if (await database.mediaFilePath(sha) != null) deliver.add(sha);
+          final path = await database.mediaFilePath(sha);
+          if (path == null) continue;
+          deliver.add(sha);
+          deliverBytes += await File(path).length();
         }
-        final sendDone = _sendMediaFiles(deliver);
-        await processing;
-        await sendDone;
+        var mediaSentBytes = 0;
+        await _sendMediaFiles(deliver, (fileIndex, fileBytes) {
+          mediaSentBytes += fileBytes;
+          final kb = (mediaSentBytes / 1024).round();
+          final totalKb = (deliverBytes / 1024).round();
+          emit('media', '$kb/$totalKb KB');
+        });
+        emit('media', '${deliver.length}');
       }
 
       // 6. First pairing: issue and share the pairing token so both
@@ -429,6 +457,7 @@ class SyncSessionEngine {
       // it guarantees every inbound media frame has been stored.
       await byeReceived.future;
       await processing;
+      emit('done', '');
       result.success = true;
       return result;
     } catch (error) {
@@ -463,7 +492,11 @@ class SyncSessionEngine {
 
   // ---- outbound helpers --------------------------------------------------
 
-  Future<void> _sendBatches(String kind, List<Map<String, Object?>> rows) async {
+  Future<void> _sendBatches(
+    String kind,
+    List<Map<String, Object?>> rows,
+    void Function(int sentCount) onBatch,
+  ) async {
     for (var i = 0; i < rows.length; i += batchSize) {
       await channel.sendControl(
         _rowsFrame,
@@ -476,10 +509,15 @@ class SyncSessionEngine {
           ),
         },
       );
+      onBatch(i + batchSize > rows.length ? rows.length : i + batchSize);
     }
   }
 
-  Future<void> _sendMediaFiles(List<String> hashes) async {
+  Future<void> _sendMediaFiles(
+    List<String> hashes,
+    void Function(int fileIndex, int fileBytes) onFileSent,
+  ) async {
+    var fileIndex = 0;
     for (final sha in hashes) {
       final path = await database.mediaFilePath(sha);
       if (path == null) continue;
@@ -509,6 +547,8 @@ class SyncSessionEngine {
         seq: _nextSeq,
         data: {'sha': sha},
       );
+      fileIndex++;
+      onFileSent(fileIndex, bytes.length);
     }
   }
 
@@ -519,6 +559,11 @@ class SyncSessionEngine {
     SyncRepository repo,
     SyncSessionResult result,
   ) async {
+    void emitReceive() => onProgress?.call(
+          result,
+          'receive',
+          '${result.receivedInvoices + result.receivedProfiles}',
+        );
     while (events.isNotEmpty) {
       final event = events.removeFirst();
       switch (event) {
@@ -565,14 +610,17 @@ class SyncSessionEngine {
                 result.mediaNeeded.add(sha);
               }
             }
+            emitReceive();
           }
         case _MediaStartEvent(:final sha, :final chunks):
           _media.start(sha, chunks);
+          onProgress?.call(result, 'media', '');
         case _MediaChunkEvent(:final bytes):
           _media.addChunk(bytes);
         case _MediaEndEvent():
           final stored = await _media.finish(database);
           result.mediaTransferred += stored;
+          onProgress?.call(result, 'media', '${result.mediaTransferred}');
       }
     }
   }

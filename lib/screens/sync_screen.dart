@@ -39,6 +39,9 @@ class _SyncScreenState extends State<SyncScreen> {
   _Phase _phase = _Phase.config;
   String? _statusLine;
   SyncSessionResult? _result;
+  SyncSessionResult? _live;
+  String _progressPhase = '';
+  String _progressDetail = '';
   String? _error;
 
   WsServerTransport? _server;
@@ -118,12 +121,32 @@ class _SyncScreenState extends State<SyncScreen> {
       channel: channel,
       database: widget.database,
       preferences: _preferences,
+      onProgress: _onProgress,
     );
     final result = await engine.run();
     await channel.close();
     await _reload();
     _showResult(result);
   }
+
+  void _onProgress(SyncSessionResult live, String phase, String detail) {
+    if (!mounted) return;
+    setState(() {
+      _live = live;
+      _progressPhase = phase;
+      _progressDetail = detail;
+    });
+  }
+
+  String _phaseLabel(String phase) => switch (phase) {
+        'meta' => tr(context, 'progressMeta'),
+        'payload' => tr(context, 'progressPayload'),
+        'receive' => tr(context, 'progressReceive'),
+        'summary' => tr(context, 'progressSummary'),
+        'media' => tr(context, 'progressMedia'),
+        'done' => tr(context, 'progressDone'),
+        _ => phase,
+      };
 
   /// Hosts a brand-new pairing: QR on screen, persistent host key.
   Future<void> _host() async {
@@ -204,6 +227,7 @@ class _SyncScreenState extends State<SyncScreen> {
         hostRole: true,
         expectedPeerDeviceId: peer.deviceId,
         peerTokenLookup: (_) async => peer.pairToken,
+        onProgress: _onProgress,
       );
       final result = await engine.run();
       await channel.close();
@@ -245,6 +269,7 @@ class _SyncScreenState extends State<SyncScreen> {
         mySavedToken: peer.pairToken,
         peerIp: peer.lastIp,
         peerPort: peer.lastPort,
+        onProgress: _onProgress,
       );
       final result = await engine.run();
       await channel.close();
@@ -302,6 +327,7 @@ class _SyncScreenState extends State<SyncScreen> {
         peerHostPublicKeyB64: pairing.publicKeyB64,
         peerIp: pairing.ip,
         peerPort: pairing.port,
+        onProgress: _onProgress,
       );
       final result = await engine.run();
       await channel.close();
@@ -480,9 +506,39 @@ class _SyncScreenState extends State<SyncScreen> {
                 padding: const EdgeInsets.all(20),
                 child: Column(
                   children: [
-                    const CircularProgressIndicator(),
+                    const LinearProgressIndicator(),
                     const SizedBox(height: 14),
                     Text(_statusLine ?? ''),
+                    if (_progressPhase.isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Text(
+                            _phaseLabel(_progressPhase),
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const Spacer(),
+                          if (_live != null)
+                            Text(
+                              '${_live!.receivedInvoices + _live!.receivedProfiles} / '
+                              '${_live!.sentInvoices + _live!.sentProfiles}',
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                        ],
+                      ),
+                      if (_progressDetail.isNotEmpty)
+                        Align(
+                          alignment: AlignmentDirectional.centerStart,
+                          child: Text(
+                            _progressDetail,
+                            style: theme.textTheme.bodySmall,
+                          ),
+                        ),
+                    ],
                   ],
                 ),
               ),

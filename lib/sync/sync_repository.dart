@@ -127,8 +127,12 @@ class SyncRepository {
   ) async {
     final result = SyncMergeResult();
     final mediaCandidates = <String>{};
-    await database.transaction((txn) async {
-      for (final rawRow in rows) {
+    // Rows are applied one by one without wrapping the batch in a
+    // transaction: each statement is atomic on its own, and long-lived
+    // transactions have been observed to deadlock the sqflite method
+    // channel on some Android devices. A crash mid-batch simply leaves
+    // rows unmerged for the next sync - never a corrupted state.
+    for (final rawRow in rows) {
         final row = _jsonSafe(rawRow);
         final id = row['id'] as String?;
         if (id == null || id.isEmpty) continue; // Malformed; ignore.
@@ -145,7 +149,7 @@ class SyncRepository {
         final incomingSha = ((row['image_sha256'] as String?) ?? '').trim();
 
         if (!isDeleted && payloadSha.isNotEmpty) {
-          final duplicate = await txn.rawQuery(
+          final duplicate = await database.rawQuery(
             'SELECT id, image_sha256, note FROM invoices '
             'WHERE payload_sha256 = ? AND is_deleted = 0 AND id != ? LIMIT 1',
             [payloadSha, id],
@@ -167,7 +171,7 @@ class SyncRepository {
             }
             if (updates.isNotEmpty) {
               final localId = local['id'] as String;
-              await txn.update(
+              await database.update(
                 'invoices',
                 updates,
                 where: 'id = ?',
@@ -179,13 +183,13 @@ class SyncRepository {
                 mediaCandidates.add(incomingSha);
               }
             }
-            await _log(txn, 'inbound', 'invoices', id, 'duplicate-skipped',
+            await _log(database, 'inbound', 'invoices', id, 'duplicate-skipped',
                 'payload $payloadSha already stored');
             continue;
           }
         }
 
-        final existing = await txn.query(
+        final existing = await database.query(
           'invoices',
           where: 'id = ?',
           whereArgs: [id],
@@ -203,25 +207,24 @@ class SyncRepository {
                   incomingDevice.compareTo(localDevice) > 0);
           if (!incomingWins) {
             result.keptLocal++;
-            await _log(txn, 'inbound', 'invoices', id, 'kept-local',
+            await _log(database, 'inbound', 'invoices', id, 'kept-local',
                 'local row is newer');
             continue;
           }
-          await txn.insert(
+          await database.insert(
             'invoices',
             row,
             conflictAlgorithm: ConflictAlgorithm.replace,
           );
           result.overwritten++;
         } else {
-          await txn.insert('invoices', row);
+          await database.insert('invoices', row);
           result.applied++;
         }
         if (!isDeleted && incomingSha.isNotEmpty) {
           mediaCandidates.add(incomingSha);
         }
-      }
-    });
+    }
     // Media bookkeeping runs outside the write transaction on purpose:
     // file probes have no business holding the database lock.
     for (final sha in mediaCandidates) {
@@ -260,12 +263,11 @@ class SyncRepository {
     List<Map<String, Object?>> rows,
   ) async {
     final result = SyncMergeResult();
-    await database.transaction((txn) async {
-      for (final rawRow in rows) {
+    for (final rawRow in rows) {
         final row = _jsonSafe(rawRow);
         final key = row['key'] as String?;
         if (key == null || key.isEmpty) continue;
-        final existing = await txn.query(
+        final existing = await database.query(
           'shop_profiles',
           where: 'key = ?',
           whereArgs: [key],
@@ -279,7 +281,7 @@ class SyncRepository {
             result.keptLocal++;
             continue;
           }
-          await txn.insert(
+          await database.insert(
             'shop_profiles',
             row,
             conflictAlgorithm: ConflictAlgorithm.replace,
@@ -287,10 +289,9 @@ class SyncRepository {
           result.overwritten++;
           continue;
         }
-        await txn.insert('shop_profiles', row);
+        await database.insert('shop_profiles', row);
         result.applied++;
-      }
-    });
+    }
     return result;
   }
 
