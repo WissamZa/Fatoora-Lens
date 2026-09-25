@@ -125,33 +125,35 @@ class _SyncScreenState extends State<SyncScreen> {
       if (!mounted) return;
       setState(() => _pairing = pairing);
 
-      // Wait for the guest's handshake, then run the encrypted session.
-      await for (final _ in server.frames) {
-        final channel = await SyncSecureChannel.establish(
-          transport: server,
-          side: SyncSide.host,
-          sessionId: 'sync-${DateTime.now().millisecondsSinceEpoch}',
-          hostStaticKeyPair: hostKeys,
-        );
-        if (!mounted) {
-          await channel.close();
-          break;
-        }
-        setState(() {
-          _phase = _Phase.syncing;
-          _statusLine = tr(context, 'syncRunning');
-        });
-        final engine = SyncSessionEngine(
-          channel: channel,
-          database: widget.database,
-          preferences: _preferences,
-        );
-        final result = await engine.run();
+      // Establish directly: the channel subscribes to the server's frames
+      // itself and waits for the guest's handshake. Consuming frames with
+      // a separate loop here would steal the handshake frame and both
+      // sides would time out (seen in real two-device testing).
+      final channel = await SyncSecureChannel.establish(
+        transport: server,
+        side: SyncSide.host,
+        sessionId: 'sync-${DateTime.now().millisecondsSinceEpoch}',
+        hostStaticKeyPair: hostKeys,
+        // The host waits as long as the user keeps this screen open.
+        timeout: const Duration(minutes: 30),
+      );
+      if (!mounted) {
         await channel.close();
-        _showResult(result);
-        break;
+        return;
       }
-      _teardown();
+      setState(() {
+        _phase = _Phase.syncing;
+        _statusLine = tr(context, 'syncRunning');
+      });
+      final engine = SyncSessionEngine(
+        channel: channel,
+        database: widget.database,
+        preferences: _preferences,
+      );
+      final result = await engine.run();
+      await channel.close();
+      _showResult(result);
+      await _teardown();
     } catch (error) {
       _fail('$error');
       await _teardown();

@@ -112,6 +112,14 @@ class _OcrTextSheetState extends State<_OcrTextSheet> {
                             textAlign: TextAlign.center,
                             style: theme.textTheme.bodyMedium,
                           ),
+                          const SizedBox(height: 8),
+                          SelectableText(
+                            _error ?? '',
+                            textAlign: TextAlign.center,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
                         ],
                       ),
                     )
