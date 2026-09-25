@@ -58,9 +58,15 @@ Future<String> _createLegacyDatabase(String directoryPath) async {
   }
 
   // Same shop, two different seller-name spellings sharing one VAT number.
+  // The first row carries a photo, exactly like real devices that crashed
+  // during migration when the media table did not exist yet.
+  final imageFile = File('$directoryPath/invoice_images/receipt.jpg');
+  await imageFile.parent.create(recursive: true);
+  await imageFile.writeAsBytes(List<int>.generate(1500, (i) => i % 251));
   await insertInvoice({
     'seller_name': 'شركة بندة للتجزئة\nPanda Retail Company',
     'vat_number': '300056521610003',
+    'image_path': imageFile.path,
   });
   await insertInvoice({
     'seller_name': 'Panda',
@@ -127,6 +133,16 @@ void main() {
       );
       expect(pandaLatin.sellerName, 'Panda');
       expect(pandaLatin.sellerNameEn, 'Panda Retail Co.');
+
+      // The migrated photo is hashed into the media table and the invoice
+      // keeps pointing at a readable file.
+      expect(pandaArabic.imageSha256, isNotNull);
+      expect(File(pandaArabic.imagePath!).existsSync(), isTrue);
+      final mediaRows = await database.syncDatabase.query('media');
+      expect(
+        mediaRows.map((row) => row['sha256']),
+        contains(pandaArabic.imageSha256),
+      );
 
       // Both spellings merge into one shop keyed by the VAT number, with
       // the legacy note and the English name carried over.

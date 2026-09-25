@@ -145,6 +145,20 @@ class DatabaseService {
   ''';
 
   Future<void> _ensureSchema(DatabaseExecutor database) async {
+    // Auxiliary tables are created FIRST: the legacy migrations below
+    // write media rows (for hashed invoice images), device ids into
+    // settings, and shop metadata into shop_profiles while converting.
+    await database.execute(_shopProfilesDdl);
+    await database.execute(_mediaDdl);
+    await database.execute(_syncStateDdl);
+    await database.execute(_syncLogDdl);
+    await database.execute('''
+      CREATE TABLE IF NOT EXISTS settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      )
+    ''');
+
     final invoiceColumns = await database.rawQuery('PRAGMA table_info(invoices)');
     if (invoiceColumns.isEmpty) {
       await database.execute(_invoicesDdl);
@@ -173,20 +187,7 @@ class DatabaseService {
       'CREATE INDEX IF NOT EXISTS idx_invoices_payload ON invoices(payload_sha256)',
     );
 
-    // Shop metadata tables must exist before the shops migration writes
-    // user notes/display names into shop_profiles.
-    await database.execute(_shopProfilesDdl);
-    await database.execute(_mediaDdl);
-    await database.execute(_syncStateDdl);
-    await database.execute(_syncLogDdl);
     await _migrateShopsTable(database);
-
-    await database.execute('''
-      CREATE TABLE IF NOT EXISTS settings (
-        key TEXT PRIMARY KEY,
-        value TEXT NOT NULL
-      )
-    ''');
 
     // Shops are derived from invoices; this also separates mixed-script
     // seller names stored by older versions and re-links shops by VAT.
