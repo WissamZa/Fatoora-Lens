@@ -194,8 +194,8 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _createBackup() async {
     final english = AppL10n.isEnglish(context);
     await _runBusy(() async {
-      final backup = await widget.database.createBackupJson();
-      await ExportService.shareBackup(backup, english: english);
+      final archive = await widget.database.createBackupArchive();
+      await ExportService.shareBackupFile(archive, english: english);
     });
   }
 
@@ -227,11 +227,16 @@ class _HomeScreenState extends State<HomeScreen> {
       if (confirmed != true) return;
       final file = await FilePicker.pickFile(
         type: FileType.custom,
-        allowedExtensions: ['json'],
+        allowedExtensions: ['zip', 'json'],
       );
       if (file == null) return;
       final bytes = await file.readAsBytes();
-      await widget.database.restoreBackupJson(utf8.decode(bytes));
+      final name = file.name.toLowerCase();
+      if (name.endsWith('.json')) {
+        await widget.database.restoreBackupJson(utf8.decode(bytes));
+      } else {
+        await widget.database.restoreBackupArchive(bytes);
+      }
       await _loadData();
       _message(savedText);
     } catch (error) {

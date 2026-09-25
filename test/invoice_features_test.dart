@@ -48,7 +48,7 @@ void main() {
   group('Invoice Model with imagePath', () {
     test('supports imagePath serialization and deserialization', () {
       final invoice = Invoice(
-        id: 1,
+        id: 'inv-1',
         sellerName: 'سوبرماركت النخيل',
         vatNumber: '300000000000003',
         issuedAt: DateTime(2026, 3, 15, 14, 30),
@@ -184,7 +184,7 @@ void main() {
       tester,
     ) async {
       final invoice = Invoice(
-        id: 42,
+        id: 'inv-42',
         sellerName: 'شركة تجريبية',
         vatNumber: '310123456700003',
         issuedAt: DateTime(2026, 5, 10, 10, 0),

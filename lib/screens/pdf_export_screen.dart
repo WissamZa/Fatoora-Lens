@@ -15,7 +15,7 @@ class PdfExportScreen extends StatefulWidget {
 }
 
 class _PdfExportScreenState extends State<PdfExportScreen> {
-  late final Set<int> _selected;
+  late final Set<String> _selected;
 
   @override
   void initState() {
@@ -23,7 +23,7 @@ class _PdfExportScreenState extends State<PdfExportScreen> {
     _selected = widget.invoices.map(_keyFor).toSet();
   }
 
-  int _keyFor(Invoice invoice) => invoice.id ?? invoice.hashCode;
+  String _keyFor(Invoice invoice) => invoice.id ?? 'hash-${invoice.hashCode}';
 
   void _toggleAll() {
     setState(() {

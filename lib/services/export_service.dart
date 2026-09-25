@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:csv/csv.dart';
 import 'package:flutter/services.dart';
@@ -44,6 +45,19 @@ class ExportService {
       'fatoora_lens_$stamp.csv',
       'text/csv',
       english ? 'Fatoora Lens CSV' : 'فواتير عدسة فاتورة CSV',
+    );
+  }
+
+  /// Shares a backup archive file (ZIP with the JSON export and images).
+  static Future<void> shareBackupFile(
+    File file, {
+    required bool english,
+  }) async {
+    await _shareFile(
+      file,
+      file.uri.pathSegments.last,
+      'application/zip',
+      english ? 'Fatoora Lens backup' : 'نسخة احتياطية عدسة فاتورة',
     );
   }
 
@@ -244,6 +258,26 @@ class ExportService {
       textAlign: pw.TextAlign.center,
       textDirection: hasArabic ? pw.TextDirection.rtl : pw.TextDirection.ltr,
       style: pw.TextStyle(fontSize: fontSize, color: color, fontWeight: fontWeight),
+    );
+  }
+
+  static Future<void> _shareFile(
+    File file,
+    String fileName,
+    String mimeType,
+    String title,
+  ) async {
+    final xFile = XFile(
+      file.path,
+      name: fileName,
+      mimeType: mimeType,
+    );
+    await SharePlus.instance.share(
+      ShareParams(
+        title: title,
+        files: [xFile],
+        fileNameOverrides: [fileName],
+      ),
     );
   }
 

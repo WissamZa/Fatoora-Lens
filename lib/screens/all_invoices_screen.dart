@@ -61,7 +61,7 @@ class _AllInvoicesScreenState extends State<AllInvoicesScreen> {
       case 'oldest':
         filtered.sort((a, b) {
           final date = a.issuedAt.compareTo(b.issuedAt);
-          return date == 0 ? (a.id ?? 0).compareTo(b.id ?? 0) : date;
+          return date == 0 ? (a.id ?? '').compareTo(b.id ?? '') : date;
         });
       case 'amountHigh':
         filtered.sort((a, b) => b.totalAmount.compareTo(a.totalAmount));
@@ -79,7 +79,7 @@ class _AllInvoicesScreenState extends State<AllInvoicesScreen> {
       default:
         filtered.sort((a, b) {
           final date = b.issuedAt.compareTo(a.issuedAt);
-          return date == 0 ? (b.id ?? 0).compareTo(a.id ?? 0) : date;
+          return date == 0 ? (b.id ?? '').compareTo(a.id ?? '') : date;
         });
     }
     return filtered;

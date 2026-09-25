@@ -58,7 +58,8 @@ android {
 
     defaultConfig {
         applicationId = "com.fatooralens.app"
-        minSdk = flutter.minSdkVersion
+        // Sync module requires SQLite 3.28+ UPSERT support (Android 10+).
+        minSdk = 29
         targetSdk = flutter.targetSdkVersion
         versionCode = releaseVersionCode ?: flutter.versionCode
         versionName = releaseVersion ?: flutter.versionName

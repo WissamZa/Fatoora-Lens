@@ -106,14 +106,21 @@ void main() {
       );
       await database.initialize();
 
-      // The combined tag-1 name is separated into its two fields.
+      // The combined tag-1 name is separated into its two fields, and the
+      // integer id is replaced by a generated UUID.
       final invoices = await database.getInvoices();
       final pandaArabic = invoices.singleWhere(
-        (invoice) => invoice.id == 1,
+        (invoice) => invoice.sellerName == 'شركة بندة للتجزئة',
       );
-      expect(pandaArabic.sellerName, 'شركة بندة للتجزئة');
+      expect(pandaArabic.id, isA<String>());
+      expect(pandaArabic.id!.length, greaterThan(30));
+      expect(pandaArabic.deviceId, isNotEmpty);
+      expect(pandaArabic.payloadSha256, isNotEmpty);
+      expect(pandaArabic.isSynced, isFalse);
       expect(pandaArabic.sellerNameEn, 'Panda Retail Company');
-      final pandaLatin = invoices.singleWhere((invoice) => invoice.id == 2);
+      final pandaLatin = invoices.singleWhere(
+        (invoice) => invoice.sellerName == 'Panda',
+      );
       expect(pandaLatin.sellerName, 'Panda');
       expect(pandaLatin.sellerNameEn, 'Panda Retail Co.');
 
