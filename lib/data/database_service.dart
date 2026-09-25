@@ -325,6 +325,13 @@ class DatabaseService {
     return database;
   }
 
+  /// The open database handle for the sync repositories, which run their
+  /// own transactions against it.
+  Database get syncDatabase => _db;
+
+  /// This installation's sync identity (generated once, stored in settings).
+  String? get deviceId => _deviceId;
+
   Future<List<Invoice>> getInvoices({String? search}) async {
     final rows = await _db.query(
       'invoices',
