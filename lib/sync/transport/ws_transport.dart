@@ -175,19 +175,25 @@ class WsClientTransport extends BaseTransport with _WsDelivery {
 }
 
 /// Returns the first non-loopback IPv4 address of this device, which the
-/// diagnostic screen shows so the peer can connect. Null when offline.
+/// sync screens show so the peer can connect. Wi-Fi and ethernet
+/// interfaces are preferred over mobile data (whose address is
+/// unreachable from the local network). Null when offline.
 Future<String?> localIpv4Address() async {
   final interfaces = await NetworkInterface.list(
     type: InternetAddressType.IPv4,
     includeLoopback: false,
   );
+  String? mobileFallback;
   for (final interface in interfaces) {
+    final isWifi = interface.name.startsWith('wlan') ||
+        interface.name.startsWith('eth') ||
+        interface.name.startsWith('en');
     for (final addr in interface.addresses) {
       final raw = addr.address;
-      if (!raw.startsWith('169.254.') && !raw.startsWith('::ffff:')) {
-        return raw;
-      }
+      if (raw.startsWith('169.254.') || raw.startsWith('::ffff:')) continue;
+      if (isWifi) return raw;
+      mobileFallback ??= raw;
     }
   }
-  return null;
+  return mobileFallback;
 }
