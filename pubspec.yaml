@@ -54,3 +54,4 @@ flutter:
     - assets/fonts/NotoSansArabic-Regular.ttf
     - assets/icons/sar_symbol.svg
     - assets/tessdata/
+    - assets/tessdata_config.json

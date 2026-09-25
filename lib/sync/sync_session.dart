@@ -142,6 +142,9 @@ class SyncSessionEngine {
   int _seq = 0;
   int get _nextSeq => ++_seq;
 
+  /// The protocol step that failed, reported inside [SyncSessionResult.error].
+  String _step = 'start';
+
   final _MediaReceiveState _media = _MediaReceiveState();
 
   Future<SyncSessionResult> run({
@@ -166,7 +169,7 @@ class SyncSessionEngine {
       processing = processing
           .then((_) => _drainEvent(events, repo, result))
           .catchError((Object error, StackTrace stackTrace) {
-        result.error ??= '$error';
+        result.error ??= 'receive: $error';
       });
       return processing;
     }
@@ -233,6 +236,15 @@ class SyncSessionEngine {
         if (!peerDataEnd.isCompleted) peerDataEnd.completeError(error);
         if (!summaryReady.isCompleted) summaryReady.completeError(error);
       },
+      onDone: () {
+        // The peer (or the channel) went away: fail every pending wait so
+        // this side reports immediately instead of spinning forever.
+        const gone = SocketException('Peer closed the connection.');
+        if (!metaReady.isCompleted) metaReady.completeError(gone);
+        if (!peerDataEnd.isCompleted) peerDataEnd.completeError(gone);
+        if (!summaryReady.isCompleted) summaryReady.completeError(gone);
+        if (!byeReceived.isCompleted) byeReceived.completeError(gone);
+      },
     );
 
     try {
@@ -248,8 +260,10 @@ class SyncSessionEngine {
       final peerMeta = await metaReady.future;
       final peerId = (peerMeta['deviceId'] as String?) ?? '';
       result.peerDeviceId = peerId;
+      _step = 'meta';
 
       // 2. Build and stream our outbound payload (scope = our own prefs).
+      _step = 'payload';
       final payload = await repo.buildOutboundPayload(peerId, preferences);
       result.sentInvoices = payload.invoices.length;
       result.sentProfiles = payload.profiles.length;
@@ -258,12 +272,14 @@ class SyncSessionEngine {
       await channel.sendControl(_dataEndFrame, seq: _nextSeq);
 
       // 3. Wait for the peer's data; the chain merges it in order.
+      _step = 'receive';
       await peerDataEnd.future;
       await processing;
       // Merged rows bypass insertInvoice, so the derived shops table must
       // be rebuilt before anything reads it.
       await database.refreshDerivedShops();
 
+      _step = 'summary';
       // 4. Exchange summaries (the peer learns which media we lack).
       await channel.sendControl(
         _summaryFrame,
@@ -283,6 +299,7 @@ class SyncSessionEngine {
 
       // 5. Media phase: deliver the files the peer asked for; the chunks
       // the peer sends to us are drained by the same chain.
+      _step = 'media';
       if (preferences.syncImages) {
         final deliver = <String>[];
         for (final sha in peerNeeds) {
@@ -295,6 +312,7 @@ class SyncSessionEngine {
         await sendDone;
       }
 
+      _step = 'cursors';
       if (peerId.isNotEmpty) {
         await repo.advanceCursors(
           peerId,
@@ -309,7 +327,7 @@ class SyncSessionEngine {
       result.success = true;
       return result;
     } catch (error) {
-      result.error = '$error';
+      result.error = '$_step: $error';
       return result;
     } finally {
       await subscription.cancel();

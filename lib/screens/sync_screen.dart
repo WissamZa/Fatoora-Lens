@@ -433,6 +433,15 @@ class _ResultCard extends StatelessWidget {
                 ),
               ],
             ),
+            if (!result.success && result.error != null) ...[
+              const SizedBox(height: 8),
+              SelectableText(
+                '${tr(context, 'error')}: ${result.error}',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.error,
+                ),
+              ),
+            ],
             const SizedBox(height: 10),
             for (final entry in entries)
               Padding(
