@@ -12,6 +12,12 @@
 @import file_picker_darwin;
 #endif
 
+#if __has_include(<flutter_tesseract_ocr/FlutterTesseractOcrPlugin.h>)
+#import <flutter_tesseract_ocr/FlutterTesseractOcrPlugin.h>
+#else
+@import flutter_tesseract_ocr;
+#endif
+
 #if __has_include(<image_cropper/FLTImageCropperPlugin.h>)
 #import <image_cropper/FLTImageCropperPlugin.h>
 #else
@@ -52,6 +58,7 @@
 
 + (void)registerWithRegistry:(NSObject<FlutterPluginRegistry>*)registry {
   [FilePickerPlugin registerWithRegistrar:[registry registrarForPlugin:@"FilePickerPlugin"]];
+  [FlutterTesseractOcrPlugin registerWithRegistrar:[registry registrarForPlugin:@"FlutterTesseractOcrPlugin"]];
   [FLTImageCropperPlugin registerWithRegistrar:[registry registrarForPlugin:@"FLTImageCropperPlugin"]];
   [FLTImagePickerPlugin registerWithRegistrar:[registry registrarForPlugin:@"FLTImagePickerPlugin"]];
   [MobileScannerPlugin registerWithRegistrar:[registry registrarForPlugin:@"MobileScannerPlugin"]];

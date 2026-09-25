@@ -1,0 +1,32 @@
+group 'io.paratoner.flutter_tesseract_ocr'
+version '1.0'
+
+// Vendored copy of flutter_tesseract_ocr 0.4.31 with its Gradle setup
+// modernized for AGP 9: the upstream file declared its own old AGP
+// classpath and the removed jcenter() repository, which breaks the build.
+// The bundled AAR is resolved through a flatDir repository that must be
+// visible to every project (the app consumes it via `api`).
+
+apply plugin: 'com.android.library'
+
+rootProject.allprojects {
+    repositories {
+        flatDir {
+            dirs project(':flutter_tesseract_ocr').file('libs')
+        }
+    }
+}
+
+android {
+    namespace "io.paratoner.flutter_tesseract_ocr"
+    compileSdk 34
+
+    defaultConfig {
+        minSdkVersion 21
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+    }
+}
+
+dependencies {
+    api(name: 'tesseract4android-release', ext: 'aar')
+}

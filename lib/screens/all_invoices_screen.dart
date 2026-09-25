@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/database_service.dart';
 import '../l10n.dart';
 import '../models/invoice.dart';
+import '../models/shop.dart';
 import '../widgets/invoice_editor.dart';
 import '../widgets/invoice_tile.dart';
 
@@ -25,12 +26,20 @@ class AllInvoicesScreen extends StatefulWidget {
 class _AllInvoicesScreenState extends State<AllInvoicesScreen> {
   final TextEditingController _searchController = TextEditingController();
   late List<Invoice> _invoices;
+  List<Shop> _shops = const [];
   String _sortKey = 'newest';
 
   @override
   void initState() {
     super.initState();
     _invoices = widget.invoices;
+    _loadShops();
+  }
+
+  Future<void> _loadShops() async {
+    final shops = await widget.database.getShops();
+    if (!mounted) return;
+    setState(() => _shops = shops);
   }
 
   @override
@@ -60,7 +69,12 @@ class _AllInvoicesScreenState extends State<AllInvoicesScreen> {
         filtered.sort((a, b) => a.totalAmount.compareTo(b.totalAmount));
       case 'shopName':
         filtered.sort(
-          (a, b) => a.sellerName.toLowerCase().compareTo(b.sellerName.toLowerCase()),
+          (a, b) => (Shop.displayNameForInvoice(_shops, a) ?? a.sellerName)
+              .toLowerCase()
+              .compareTo(
+                (Shop.displayNameForInvoice(_shops, b) ?? b.sellerName)
+                    .toLowerCase(),
+              ),
         );
       default:
         filtered.sort((a, b) {
@@ -75,6 +89,7 @@ class _AllInvoicesScreenState extends State<AllInvoicesScreen> {
     final invoices = await widget.database.getInvoices();
     if (!mounted) return;
     setState(() => _invoices = invoices);
+    await _loadShops();
     widget.onChanged();
   }
 
@@ -213,6 +228,7 @@ class _AllInvoicesScreenState extends State<AllInvoicesScreen> {
                         final invoice = visible[index];
                         return InvoiceTile(
                           invoice: invoice,
+                          shopName: Shop.displayNameForInvoice(_shops, invoice),
                           onEdit: () => _editInvoice(invoice),
                           onDelete: () => _deleteInvoice(invoice),
                         );

@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 
 import '../l10n.dart';
 import '../models/invoice.dart';
+import '../models/shop.dart';
 
 class PdfExportScreen extends StatefulWidget {
-  const PdfExportScreen({required this.invoices, super.key});
+  const PdfExportScreen({required this.invoices, this.shops = const [], super.key});
 
   final List<Invoice> invoices;
+  final List<Shop> shops;
 
   @override
   State<PdfExportScreen> createState() => _PdfExportScreenState();
@@ -53,7 +55,10 @@ class _PdfExportScreenState extends State<PdfExportScreen> {
             child: CheckboxListTile(
               value: _selected.contains(key),
               onChanged: (value) => setState(() => value == true ? _selected.add(key) : _selected.remove(key)),
-              title: Text(invoice.sellerName, style: const TextStyle(fontWeight: FontWeight.w700)),
+              title: Text(
+                Shop.displayNameForInvoice(widget.shops, invoice) ?? invoice.sellerName,
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
               subtitle: Text('${invoice.issuedAt.toLocal()}  •  ${invoice.totalAmount.toStringAsFixed(2)}'),
             ),
           );

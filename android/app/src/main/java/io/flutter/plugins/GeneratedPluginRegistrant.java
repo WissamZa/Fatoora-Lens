@@ -26,6 +26,11 @@ public final class GeneratedPluginRegistrant {
       Log.e(TAG, "Error registering plugin flutter_plugin_android_lifecycle, io.flutter.plugins.flutter_plugin_android_lifecycle.FlutterAndroidLifecyclePlugin", e);
     }
     try {
+      flutterEngine.getPlugins().add(new io.paratoner.flutter_tesseract_ocr.FlutterTesseractOcrPlugin());
+    } catch (Exception e) {
+      Log.e(TAG, "Error registering plugin flutter_tesseract_ocr, io.paratoner.flutter_tesseract_ocr.FlutterTesseractOcrPlugin", e);
+    }
+    try {
       flutterEngine.getPlugins().add(new vn.hunghd.flutter.plugins.imagecropper.ImageCropperPlugin());
     } catch (Exception e) {
       Log.e(TAG, "Error registering plugin image_cropper, vn.hunghd.flutter.plugins.imagecropper.ImageCropperPlugin", e);

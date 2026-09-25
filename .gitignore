@@ -17,3 +17,6 @@ ios/Flutter/ephemeral/
 *.keystore
 android/key.properties
 key.properties
+
+# ZCode workspace metadata
+.zcode/

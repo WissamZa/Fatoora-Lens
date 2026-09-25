@@ -9,6 +9,7 @@ import '../l10n.dart';
 import '../models/invoice.dart';
 import '../services/zatca_qr_parser.dart';
 import '../screens/scanner_screen.dart';
+import 'ocr_text_sheet.dart';
 import 'sar_symbol.dart';
 
 Future<Invoice?> showInvoiceEditor(
@@ -459,6 +460,34 @@ class _InvoiceEditorDialogState extends State<_InvoiceEditorDialog> {
                                         tr(context, 'removeImage'),
                                         style: TextStyle(
                                           color: theme.colorScheme.error,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              InkWell(
+                                onTap: () =>
+                                    showOcrTextSheet(context, _imagePath!),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 4,
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.document_scanner_outlined,
+                                        size: 14,
+                                        color: theme.colorScheme.primary,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        tr(context, 'extractText'),
+                                        style: TextStyle(
+                                          color: theme.colorScheme.primary,
                                           fontSize: 12,
                                           fontWeight: FontWeight.w600,
                                         ),

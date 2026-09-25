@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../l10n.dart';
 import '../models/invoice.dart';
 import '../services/zatca_qr_parser.dart';
+import 'ocr_text_sheet.dart';
 import 'sar_symbol.dart';
 
 class InvoiceTile extends StatelessWidget {
@@ -13,12 +14,16 @@ class InvoiceTile extends StatelessWidget {
     required this.invoice,
     required this.onEdit,
     required this.onDelete,
+    this.shopName,
     super.key,
   });
 
   final Invoice invoice;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
+
+  /// Custom shop display name shown instead of the raw QR name when set.
+  final String? shopName;
 
   void _showDetails(BuildContext context) {
     showModalBottomSheet<void>(
@@ -29,6 +34,7 @@ class InvoiceTile extends StatelessWidget {
       ),
       builder: (ctx) => _InvoiceDetailsSheet(
         invoice: invoice,
+        shopName: shopName,
         onEdit: () {
           Navigator.pop(ctx);
           onEdit();
@@ -99,7 +105,7 @@ class InvoiceTile extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          invoice.sellerName,
+                          shopName ?? invoice.sellerName,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: theme.textTheme.titleMedium?.copyWith(
@@ -273,11 +279,15 @@ class _InvoiceDetailsSheet extends StatelessWidget {
     required this.invoice,
     required this.onEdit,
     required this.onDelete,
+    this.shopName,
   });
 
   final Invoice invoice;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
+
+  /// Custom shop display name shown instead of the raw QR name when set.
+  final String? shopName;
 
   void _copyVatNumber(BuildContext context) {
     if (invoice.vatNumber.isEmpty) return;
@@ -361,9 +371,14 @@ class _InvoiceDetailsSheet extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        invoice.sellerName,
+                        shopName ?? invoice.sellerName,
                         style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
                       ),
+                      if (shopName != null && shopName != invoice.sellerName)
+                        Text(
+                          '${tr(context, 'shopNameInInvoice')}: ${invoice.sellerName}',
+                          style: theme.textTheme.bodySmall,
+                        ),
                       Text(
                         '${ZatcaQrParser.formatDate(invoice.issuedAt)}  •  ${ZatcaQrParser.formatTime(invoice.issuedAt)}',
                         style: theme.textTheme.bodySmall,
@@ -586,6 +601,12 @@ class _InvoiceDetailsSheet extends StatelessWidget {
                     ],
                   ),
                 ),
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: () => showOcrTextSheet(context, invoice.imagePath!),
+                icon: const Icon(Icons.document_scanner_outlined, size: 18),
+                label: Text(tr(context, 'extractText')),
               ),
               const SizedBox(height: 16),
             ],

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:intl/intl.dart';
 
 import '../models/invoice.dart';
+import 'seller_name_splitter.dart';
 
 class ZatcaQrParser {
   static Invoice parse(String payload) {
@@ -29,8 +30,15 @@ class ZatcaQrParser {
       throw const FormatException('تعذر قراءة التاريخ أو المبالغ من رمز QR.');
     }
 
+    // Tag 1 often carries both language names in one string ("عربي\nEnglish");
+    // separate them so each is stored in its own field.
+    final rawName = sellerName.trim();
+    final nameParts = SellerNameSplitter.split(rawName);
+    final hasArabicName = nameParts.arabic.isNotEmpty;
+
     return Invoice(
-      sellerName: sellerName.trim(),
+      sellerName: hasArabicName ? nameParts.arabic : rawName,
+      sellerNameEn: hasArabicName ? nameParts.english : '',
       vatNumber: values[2]?.trim() ?? '',
       issuedAt: issuedAt,
       totalAmount: totalAmount,

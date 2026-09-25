@@ -8,6 +8,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:share_plus/share_plus.dart';
 
 import '../models/invoice.dart';
+import '../models/shop.dart';
 import 'zatca_qr_parser.dart';
 
 class ExportService {
@@ -15,14 +16,18 @@ class ExportService {
   /// in a FittedBox so longer text scales down to fit instead of clipping.
   static const double _pdfFontSize = 8;
 
-  static Future<void> shareCsv(List<Invoice> invoices, {required bool english}) async {
+  static Future<void> shareCsv(
+    List<Invoice> invoices, {
+    required bool english,
+    List<Shop> shops = const [],
+  }) async {
     final headers = english
         ? ['Shop', 'Invoice no.', 'VAT number', 'Date', 'Time', 'Amount', 'Tax', 'Note']
         : ['اسم المحل', 'رقم الفاتورة', 'الرقم الضريبي', 'التاريخ', 'الوقت', 'المبلغ', 'الضريبة', 'ملاحظة'];
     final rows = <List<Object?>>[
       headers,
       ...invoices.map((invoice) => [
-            invoice.sellerName,
+            Shop.displayNameForInvoice(shops, invoice) ?? invoice.sellerName,
             invoice.invoiceNumber,
             invoice.vatNumber,
             ZatcaQrParser.formatDate(invoice.issuedAt),
@@ -56,6 +61,7 @@ class ExportService {
   static Future<pw.Document> buildPdf(
     List<Invoice> invoices, {
     required bool english,
+    List<Shop> shops = const [],
   }) async {
     final fontData = await rootBundle.load('assets/fonts/NotoSansArabic-Regular.ttf');
     final font = pw.Font.ttf(fontData.buffer.asByteData());
@@ -78,7 +84,7 @@ class ExportService {
     final resolvedHeaders = english ? englishHeaders : headers;
     final data = invoices
         .map((invoice) => [
-              _shopCell(invoice),
+              _shopCell(invoice, shops),
               _pdfCell(invoice.invoiceNumber.isEmpty ? '-' : invoice.invoiceNumber),
               _pdfCell(invoice.vatNumber.isEmpty ? '-' : invoice.vatNumber),
               _pdfCell(ZatcaQrParser.formatDate(invoice.issuedAt)),
@@ -158,8 +164,9 @@ class ExportService {
   static Future<void> sharePdf(
     List<Invoice> invoices, {
     required bool english,
+    List<Shop> shops = const [],
   }) async {
-    final document = await buildPdf(invoices, english: english);
+    final document = await buildPdf(invoices, english: english, shops: shops);
     final title = english ? 'Zakat invoices report' : 'تقرير فواتير الزكاة';
 
     final stamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
@@ -179,17 +186,20 @@ class ExportService {
     );
   }
 
-  /// Arabic shop name on the first line with the English name under it when available.
-  static pw.Widget _shopCell(Invoice invoice) {
+  /// Shop display name (custom name when set) on the first line with the
+  /// English name under it when available.
+  static pw.Widget _shopCell(Invoice invoice, List<Shop> shops) {
+    final shownName =
+        Shop.displayNameForInvoice(shops, invoice) ?? invoice.sellerName;
     final englishName = invoice.sellerNameEn.trim();
-    if (englishName.isEmpty) return _pdfCell(invoice.sellerName);
+    if (englishName.isEmpty) return _pdfCell(shownName);
     return pw.FittedBox(
       fit: pw.BoxFit.scaleDown,
       alignment: pw.Alignment.center,
       child: pw.Column(
         mainAxisSize: pw.MainAxisSize.min,
         children: [
-          _bidiText(invoice.sellerName, fontWeight: pw.FontWeight.bold),
+          _bidiText(shownName, fontWeight: pw.FontWeight.bold),
           pw.SizedBox(height: 2),
           _bidiText(englishName, color: PdfColors.grey700),
         ],

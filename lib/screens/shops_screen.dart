@@ -51,6 +51,20 @@ class ShopsTab extends StatelessWidget {
             subtitle: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (shop.hasCustomName && shop.nameAr.isNotEmpty)
+                  Text(
+                    '${tr(context, 'shopNameInInvoice')}: ${shop.nameAr}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                if (shop.nameEn.isNotEmpty && shop.nameEn != shop.name)
+                  Text(
+                    shop.nameEn,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
                 if (shop.vatNumber.isNotEmpty)
                   Text(
                     '${tr(context, 'vatNumber')}: ${shop.vatNumber}',
@@ -152,16 +166,36 @@ class _ShopDetailsScreenState extends State<ShopDetailsScreen> {
     await _reload();
   }
 
-  Future<void> _editNote() async {
-    final controller = TextEditingController(text: _shop.note);
-    final note = await showDialog<String>(
+  Future<void> _editShop() async {
+    final nameController = TextEditingController(text: _shop.displayName);
+    final noteController = TextEditingController(text: _shop.note);
+    final result = await showDialog<({String displayName, String note})>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(tr(context, 'shopNote')),
-        content: TextField(
-          controller: controller,
-          maxLines: 4,
-          autofocus: true,
+        title: Text(tr(context, 'editShop')),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameController,
+              autofocus: true,
+              decoration: InputDecoration(
+                labelText: tr(context, 'customShopName'),
+                hintText: _shop.nameAr.isNotEmpty ? _shop.nameAr : _shop.nameEn,
+                prefixIcon: const Icon(Icons.storefront_outlined),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: noteController,
+              maxLines: 3,
+              decoration: InputDecoration(
+                labelText: tr(context, 'shopNote'),
+                prefixIcon: const Icon(Icons.note_alt_outlined),
+                alignLabelWithHint: true,
+              ),
+            ),
+          ],
         ),
         actions: [
           TextButton(
@@ -169,22 +203,37 @@ class _ShopDetailsScreenState extends State<ShopDetailsScreen> {
             child: Text(tr(context, 'cancel')),
           ),
           FilledButton(
-            onPressed: () => Navigator.pop(context, controller.text),
+            onPressed: () => Navigator.pop(
+              context,
+              (
+                displayName: nameController.text,
+                note: noteController.text,
+              ),
+            ),
             child: Text(tr(context, 'save')),
           ),
         ],
       ),
     );
-    controller.dispose();
-    if (note == null) return;
-    await widget.database.updateShopNote(_shop.name, note);
+    nameController.dispose();
+    noteController.dispose();
+    if (result == null) return;
+    await widget.database.updateShopProfile(
+      shopId: _shop.id!,
+      displayName: result.displayName,
+      note: result.note,
+    );
     await _reload();
   }
 
   Future<void> _reload() async {
     final shops = await widget.database.getShops();
-    final updated = shops.where((shop) => shop.name == _shop.name).firstOrNull;
-    if (!mounted || updated == null) return;
+    final updated = shops.where((shop) => shop.id == _shop.id).firstOrNull;
+    if (!mounted) return;
+    if (updated == null) {
+      Navigator.of(context).pop();
+      return;
+    }
     setState(() => _shop = updated);
   }
 
@@ -207,6 +256,22 @@ class _ShopDetailsScreenState extends State<ShopDetailsScreen> {
                       fontWeight: FontWeight.w800,
                     ),
                   ),
+                  if (_shop.hasCustomName && _shop.nameAr.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      '${tr(context, 'shopNameInInvoice')}: ${[
+                        _shop.nameAr,
+                        if (_shop.nameEn.isNotEmpty) _shop.nameEn,
+                      ].join(' | ')}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ] else if (_shop.nameEn.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      _shop.nameEn,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ],
                   if (_shop.vatNumber.isNotEmpty)
                     Text(
                       '${tr(context, 'vatNumber')}: ${_shop.vatNumber}',
@@ -237,9 +302,9 @@ class _ShopDetailsScreenState extends State<ShopDetailsScreen> {
                   ),
                   const SizedBox(height: 10),
                   OutlinedButton.icon(
-                    onPressed: _editNote,
-                    icon: const Icon(Icons.note_alt_outlined),
-                    label: Text(tr(context, 'shopNote')),
+                    onPressed: _editShop,
+                    icon: const Icon(Icons.edit_outlined),
+                    label: Text(tr(context, 'editShop')),
                   ),
                   if (_shop.note.isNotEmpty) ...[
                     const SizedBox(height: 8),

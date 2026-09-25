@@ -291,6 +291,13 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.3.0"
+  flutter_tesseract_ocr:
+    dependency: "direct main"
+    description:
+      path: "third_party/flutter_tesseract_ocr"
+      relative: true
+    source: path
+    version: "0.4.31"
   flutter_test:
     dependency: "direct dev"
     description: flutter

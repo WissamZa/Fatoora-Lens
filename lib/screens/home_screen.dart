@@ -182,7 +182,13 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _exportCsv() async {
     if (_invoices.isEmpty) return _message(tr(context, 'noInvoices'));
     final english = AppL10n.isEnglish(context);
-    await _runBusy(() => ExportService.shareCsv(_invoices, english: english));
+    await _runBusy(
+      () => ExportService.shareCsv(
+        _invoices,
+        english: english,
+        shops: _shops,
+      ),
+    );
   }
 
   Future<void> _createBackup() async {
@@ -237,10 +243,14 @@ class _HomeScreenState extends State<HomeScreen> {
     if (_invoices.isEmpty) return _message(tr(context, 'noInvoices'));
     final english = AppL10n.isEnglish(context);
     final selected = await Navigator.of(context).push<List<Invoice>>(
-      MaterialPageRoute(builder: (_) => PdfExportScreen(invoices: _invoices)),
+      MaterialPageRoute(
+        builder: (_) => PdfExportScreen(invoices: _invoices, shops: _shops),
+      ),
     );
     if (selected == null || selected.isEmpty) return;
-    await _runBusy(() => ExportService.sharePdf(selected, english: english));
+    await _runBusy(
+      () => ExportService.sharePdf(selected, english: english, shops: _shops),
+    );
   }
 
   Future<void> _openAllInvoices() async {
@@ -432,6 +442,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final filtered = _invoices.where((invoice) {
       final matchesText = query.isEmpty ||
           invoice.sellerName.toLowerCase().contains(query) ||
+          invoice.sellerNameEn.toLowerCase().contains(query) ||
           invoice.vatNumber.toLowerCase().contains(query) ||
           invoice.invoiceNumber.toLowerCase().contains(query);
       final filterValue = _amountFilterValue;
@@ -602,6 +613,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ...shown.map(
               (invoice) => InvoiceTile(
                 invoice: invoice,
+                shopName: Shop.displayNameForInvoice(_shops, invoice),
                 onEdit: () => _editInvoice(invoice),
                 onDelete: () => _deleteInvoice(invoice),
               ),
