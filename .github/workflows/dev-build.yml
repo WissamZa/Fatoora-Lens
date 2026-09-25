@@ -1,0 +1,54 @@
+name: Dev test build
+
+on:
+  push:
+    branches:
+      - dev
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-dev-apk:
+    name: Build dev test APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v6.0.1
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Run tests
+        run: flutter test
+
+      - name: Build universal release APK
+        run: flutter build apk --release --tree-shake-icons
+
+      - name: Rename APK
+        run: |
+          set -euo pipefail
+          short_sha="${GITHUB_SHA::7}"
+          mv build/app/outputs/flutter-apk/app-release.apk \
+            "build/app/outputs/flutter-apk/fatoora-lens-dev-r${{ github.run_number }}-${short_sha}.apk"
+
+      - name: Upload test APK
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: fatoora-lens-dev-r${{ github.run_number }}
+          path: build/app/outputs/flutter-apk/*.apk
+          if-no-files-found: error
