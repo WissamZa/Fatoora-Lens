@@ -39,6 +39,10 @@ void main() {
       ),
     );
 
+    // The about card sits below the sync entry added in v1.1.x, so the
+    // list must be scrolled before it is hittable in the test viewport.
+    await tester.ensureVisible(find.text('حول التطبيق'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('حول التطبيق'));
     await tester.pumpAndSettle();
 

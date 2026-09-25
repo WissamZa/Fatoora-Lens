@@ -29,6 +29,11 @@ dependencies:
   # Vendored AGP 9 compatible copy of flutter_tesseract_ocr 0.4.31.
   flutter_tesseract_ocr:
     path: third_party/flutter_tesseract_ocr
+  # Sync module (M1: transport layer + connection diagnostics).
+  crypto: ^3.0.6
+  shelf: ^1.4.2
+  shelf_web_socket: ^3.0.0
+  web_socket_channel: ^3.0.2
 
 dev_dependencies:
   flutter_test:

@@ -3,6 +3,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 
 import '../config/app_info.dart';
 import '../l10n.dart';
+import 'connection_test_screen.dart';
 
 class SettingsTab extends StatelessWidget {
   const SettingsTab({
@@ -67,6 +68,14 @@ class SettingsTab extends StatelessWidget {
         _ActionCard(icon: Icons.restore_outlined, title: tr(context, 'restore'), onTap: onRestore),
         const SizedBox(height: 10),
         _ActionCard(icon: Icons.picture_as_pdf_outlined, title: tr(context, 'pdf'), onTap: onPdf),
+        const SizedBox(height: 10),
+        _ActionCard(
+          icon: Icons.wifi_tethering_rounded,
+          title: tr(context, 'connectionTest'),
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const ConnectionTestScreen()),
+          ),
+        ),
         const SizedBox(height: 10),
         _ActionCard(icon: Icons.info_outline_rounded, title: tr(context, 'aboutApp'), onTap: () => _showAboutDialog(context)),
       ],

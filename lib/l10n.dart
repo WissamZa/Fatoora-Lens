@@ -130,6 +130,29 @@ class AppL10n {
     'version': 'الإصدار',
     'contact': 'للتواصل',
     'close': 'إغلاق',
+    'connectionTest': 'فحص الاتصال',
+    'connTestIntro':
+        'أداة تشخيص تتحقق من جاهزية قنوات المزامنة قبل تفعيلها: تُجرى الاختبارات ذاتياً على هذا الجهاز، أو بين جهازين على نفس شبكة الواي فاي. لا تُرسل أي بيانات فواتير في هذه المرحلة.',
+    'selfTest': 'اختبار ذاتي (بدون جهاز آخر)',
+    'selfTestHint': 'يشغّل كامل منظومة الاختبار داخل هذا الجهاز عبر قناة وهمية.',
+    'hostTest': 'استضافة الاختبار على هذه الشبكة',
+    'hostTestHint': 'يفتح خادماً محلياً وينتظر اتصال الجهاز الآخر لإجراء الفحوص.',
+    'joinTest': 'الاتصال بجهاز الاستضافة',
+    'ipAddress': 'عنوان IP للجهاز المضيف',
+    'connect': 'اتصال',
+    'listening': 'بانتظار اتصال الجهاز الآخر...',
+    'yourIp': 'عنوان هذا الجهاز',
+    'peerCompleted': 'أكمل الجهاز الآخر الاختبار بنجاح.',
+    'allPassed': 'نجحت جميع الفحوص.',
+    'someFailed': 'فشل بعض الفحوص — راجع التفاصيل أدناه.',
+    'running': 'جارٍ التشغيل...',
+    'connecting': 'جارٍ الاتصال...',
+    'hostUnreachable': 'لم يتمكن من الوصول إلى الجهاز المضيف خلال المهلة المحددة.',
+    'testPing': 'زمن الاستجابة (Ping)',
+    'testTransfer': 'نقل بيانات',
+    'testHandshake': 'المصافحة الأولية',
+    'cloudTestPending':
+        'ملاحظة: اختبار قناة السحابة البديلة (WebRTC عبر Firebase) يُضاف بعد تجهيز مشروع Firebase، وسيمر بنفس هذه الفحوص.',
   };
 
   static const _en = <String, String>{
@@ -253,6 +276,29 @@ class AppL10n {
     'version': 'Version',
     'contact': 'Contact',
     'close': 'Close',
+    'connectionTest': 'Connection test',
+    'connTestIntro':
+        'A diagnostic tool that verifies the sync channels before they are enabled: tests run on this device alone, or between two devices on the same Wi-Fi. No invoice data is transmitted at this stage.',
+    'selfTest': 'Self test (no second device)',
+    'selfTestHint': 'Runs the full battery inside this device over a virtual channel.',
+    'hostTest': 'Host the test on this network',
+    'hostTestHint': 'Starts a local server and waits for the other device to run the checks.',
+    'joinTest': 'Connect to the hosting device',
+    'ipAddress': 'Host IP address',
+    'connect': 'Connect',
+    'listening': 'Waiting for the other device...',
+    'yourIp': 'This device IP',
+    'peerCompleted': 'The other device finished the tests successfully.',
+    'allPassed': 'All checks passed.',
+    'someFailed': 'Some checks failed — see the details below.',
+    'running': 'Running...',
+    'connecting': 'Connecting...',
+    'hostUnreachable': 'Could not reach the host within the timeout.',
+    'testPing': 'Round-trip (Ping)',
+    'testTransfer': 'Data transfer',
+    'testHandshake': 'Initial handshake',
+    'cloudTestPending':
+        'Note: the cloud fallback channel test (WebRTC over Firebase) is added once the Firebase project is configured, and runs the same checks.',
   };
 }
 
