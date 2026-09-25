@@ -4,7 +4,9 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import '../data/database_service.dart';
+import '../models/sync_peer.dart';
 import 'security/sync_secure_channel.dart';
+import 'sync_identity.dart';
 import 'sync_preferences.dart';
 import 'sync_repository.dart';
 
@@ -87,6 +89,16 @@ class _ByeEvent extends _InboundEvent {
   const _ByeEvent();
 }
 
+class _PairVerifyEvent extends _InboundEvent {
+  _PairVerifyEvent(this.token);
+  final String token;
+}
+
+class _PairTokenEvent extends _InboundEvent {
+  _PairTokenEvent(this.token);
+  final String token;
+}
+
 /// Accumulates one incoming media file across its chunks.
 class _MediaReceiveState {
   String? sha;
@@ -121,6 +133,14 @@ class SyncSessionEngine {
     required this.channel,
     required this.database,
     required this.preferences,
+    this.hostRole = false,
+    this.issuePairToken = false,
+    this.expectedPeerDeviceId,
+    this.peerTokenLookup,
+    this.mySavedToken,
+    this.peerHostPublicKeyB64,
+    this.peerIp,
+    this.peerPort,
     this.batchSize = 100,
     this.mediaChunkSize = 64 * 1024,
   });
@@ -129,6 +149,8 @@ class SyncSessionEngine {
   static const String _rowsFrame = 'rows';
   static const String _dataEndFrame = 'data-end';
   static const String _summaryFrame = 'summary';
+  static const String _pairVerifyFrame = 'pair-verify';
+  static const String _pairTokenFrame = 'pair-token';
   static const String _mediaStartFrame = 'media-start';
   static const String _mediaEndFrame = 'media-end';
   static const String _byeFrame = 'bye';
@@ -136,6 +158,31 @@ class SyncSessionEngine {
   final SyncSecureChannel channel;
   final DatabaseService database;
   final SyncPreferences preferences;
+
+  /// True when this device is hosting the session.
+  final bool hostRole;
+
+  /// First pairing: the host issues a shared pairing token inside the
+  /// encrypted channel; both sides store it for QR-free re-syncs.
+  final bool issuePairToken;
+
+  /// Re-sync hosting: only this saved peer may connect.
+  final String? expectedPeerDeviceId;
+
+  /// Re-sync hosting: resolves the pairing token stored for a peer.
+  final Future<String?> Function(String peerId)? peerTokenLookup;
+
+  /// Re-sync joining: the token stored for the peer we connect to.
+  final String? mySavedToken;
+
+  /// Last known endpoint of the peer (when it hosted before).
+  final String? peerIp;
+  final int? peerPort;
+
+  /// The peer's stable hosting public key (base64), stored by the guest
+  /// on first pairing so re-syncs can authenticate the host without QR.
+  final String? peerHostPublicKeyB64;
+
   final int batchSize;
   final int mediaChunkSize;
 
@@ -144,6 +191,9 @@ class SyncSessionEngine {
 
   /// The protocol step that failed, reported inside [SyncSessionResult.error].
   String _step = 'start';
+  String? _expectedPeerToken;
+  final Completer<void> peerVerified = Completer<void>();
+  final Completer<String> pairTokenReceived = Completer<String>();
 
   final _MediaReceiveState _media = _MediaReceiveState();
 
@@ -206,6 +256,14 @@ class SyncSessionEngine {
             )));
           case _mediaEndFrame:
             unawaited(enqueue(const _MediaEndEvent()));
+          case _pairVerifyFrame:
+            unawaited(enqueue(_PairVerifyEvent(
+              (frame.data['token'] as String?) ?? '',
+            )));
+          case _pairTokenFrame:
+            unawaited(enqueue(_PairTokenEvent(
+              (frame.data['token'] as String?) ?? '',
+            )));
           case _summaryFrame:
             final event = _SummaryEvent(Map<String, Object?>.from(frame.data));
             unawaited(enqueue(event).then((_) {
@@ -260,6 +318,26 @@ class SyncSessionEngine {
       final peerMeta = await metaReady.future;
       final peerId = (peerMeta['deviceId'] as String?) ?? '';
       result.peerDeviceId = peerId;
+      if (expectedPeerDeviceId != null && peerId != expectedPeerDeviceId) {
+        throw const SyncChannelException(
+          'A device other than the saved peer tried to connect.',
+        );
+      }
+      // Re-sync hosting: the peer must present the shared pairing token
+      // (driven by the chain, in frame order).
+      if (hostRole && peerTokenLookup != null && _expectedPeerToken != null) {
+        _step = 'verify';
+        await peerVerified.future;
+      }
+      // Re-sync joining: present our saved token to the host.
+      if (!hostRole && mySavedToken != null) {
+        _step = 'verify';
+        await channel.sendControl(
+          _pairVerifyFrame,
+          seq: _nextSeq,
+          data: {'token': mySavedToken},
+        );
+      }
       _step = 'meta';
 
       // 2. Build and stream our outbound payload (scope = our own prefs).
@@ -305,13 +383,40 @@ class SyncSessionEngine {
         for (final sha in peerNeeds) {
           if (await database.mediaFilePath(sha) != null) deliver.add(sha);
         }
-        // ignore: avoid_print
-        print('DEBUG media: peerNeeds=$peerNeeds deliver=$deliver');
         final sendDone = _sendMediaFiles(deliver);
         await processing;
         await sendDone;
       }
 
+      // 6. First pairing: issue and share the pairing token so both
+      // sides can re-sync later without scanning the QR again. Every
+      // successful session refreshes the saved peer record.
+      if (issuePairToken && hostRole && peerId.isNotEmpty) {
+        final token = SyncIdentity.newPairToken();
+        await channel.sendControl(
+          _pairTokenFrame,
+          seq: _nextSeq,
+          data: {'token': token},
+        );
+        await _savePeerRecord(peerId, token: token, lastRole: 'guest');
+      } else if (!hostRole && mySavedToken == null && peerId.isNotEmpty) {
+        _step = 'pair';
+        final token = await pairTokenReceived.future;
+        await _savePeerRecord(
+          peerId,
+          token: token,
+          lastRole: 'host',
+          lastIp: peerIp,
+          lastPort: peerPort,
+        );
+      } else if (peerId.isNotEmpty) {
+        await _savePeerRecord(
+          peerId,
+          lastRole: hostRole ? 'guest' : 'host',
+          lastIp: peerIp,
+          lastPort: peerPort,
+        );
+      }
       _step = 'cursors';
       if (peerId.isNotEmpty) {
         await repo.advanceCursors(
@@ -332,6 +437,28 @@ class SyncSessionEngine {
     } finally {
       await subscription.cancel();
     }
+  }
+
+  /// Creates or refreshes the saved peer record, preserving the
+  /// user-edited name and any fields not provided now.
+  Future<void> _savePeerRecord(
+    String peerId, {
+    String? token,
+    String? lastRole,
+    String? lastIp,
+    int? lastPort,
+  }) async {
+    final existing = await database.syncPeerByDeviceId(peerId);
+    var peer = existing ?? SyncPeer(deviceId: peerId);
+    peer = peer.copyWith(
+      pairToken: token,
+      lastRole: lastRole,
+      lastIp: lastIp,
+      lastPort: lastPort,
+      hostPublicKeyB64: peerHostPublicKeyB64,
+      lastSyncedAt: DateTime.now().millisecondsSinceEpoch,
+    );
+    await database.upsertSyncPeer(peer);
   }
 
   // ---- outbound helpers --------------------------------------------------
@@ -395,8 +522,25 @@ class SyncSessionEngine {
     while (events.isNotEmpty) {
       final event = events.removeFirst();
       switch (event) {
-        case _MetaEvent():
-          break;
+        case _MetaEvent(:final data):
+          if (peerTokenLookup != null) {
+            final peerId = (data['deviceId'] as String?) ?? '';
+            _expectedPeerToken = await peerTokenLookup!(peerId);
+          }
+        case _PairVerifyEvent(:final token):
+          if (_expectedPeerToken == null) break;
+          if (token == _expectedPeerToken) {
+            if (!peerVerified.isCompleted) peerVerified.complete();
+          } else {
+            result.error ??= 'verify: pairing token mismatch';
+            if (!peerVerified.isCompleted) {
+              peerVerified.completeError(
+                const SyncChannelException('Pairing token mismatch.'),
+              );
+            }
+          }
+        case _PairTokenEvent(:final token):
+          if (!pairTokenReceived.isCompleted) pairTokenReceived.complete(token);
         case _SummaryEvent():
           break;
         case _DataEndEvent():
@@ -428,8 +572,6 @@ class SyncSessionEngine {
           _media.addChunk(bytes);
         case _MediaEndEvent():
           final stored = await _media.finish(database);
-          // ignore: avoid_print
-          print('DEBUG recv mend stored=$stored');
           result.mediaTransferred += stored;
       }
     }

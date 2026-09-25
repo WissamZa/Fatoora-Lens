@@ -167,7 +167,17 @@ class AppL10n {
     'syncDone': 'اكتملت المزامنة',
     'syncFailed': 'فشلت المزامنة',
     'syncQrHint': 'من الجهاز الآخر: افتح «مزامنة الأجهزة» واضغط «انضمام» ثم امسح هذا الرمز',
-    'syncBadQr': 'رمز QR ليس رمز اقتراز صالحاً لهذا التطبيق.',
+    'syncBadQr': 'رمز QR ليس رمز اقتران صالحاً لهذا التطبيق.',
+    'savedDevices': 'الأجهزة المحفوظة',
+    'noSavedDevices': 'لا توجد أجهزة محفوظة بعد — أكمل أول مزامنة بالمسح وسيُحفظ الجهاز هنا.',
+    'newPairing': 'اقتران جديد',
+    'lastSync': 'آخر مزامنة',
+    'peerRoleHost': 'يستضيف المزامنة (أنتمل من الجهاز الآخر)',
+    'peerRoleGuest': 'ينضم إليّ عند الاستضافة',
+    'renameDevice': 'إعادة تسمية الجهاز',
+    'deviceNameLabel': 'اسم الجهاز',
+    'deleteDevice': 'حذف الجهاز المحفوظ؟',
+    'deleteDeviceConfirm': 'لن يتمكن {name} من المزامنة بدون مسح رمز الاقتران مرة أخرى.',
   };
 
   static const _en = <String, String>{
@@ -329,6 +339,16 @@ class AppL10n {
     'syncFailed': 'Sync failed',
     'syncQrHint': 'On the other device: open Device sync, tap Join, and scan this code',
     'syncBadQr': 'That QR is not a valid Fatoora Lens pairing code.',
+    'savedDevices': 'Saved devices',
+    'noSavedDevices': 'No saved devices yet — complete the first sync by scanning and the device will appear here.',
+    'newPairing': 'New pairing',
+    'lastSync': 'Last sync',
+    'peerRoleHost': 'Hosts the sync (tap Join on it)',
+    'peerRoleGuest': 'Joins me when I host',
+    'renameDevice': 'Rename device',
+    'deviceNameLabel': 'Device name',
+    'deleteDevice': 'Delete saved device?',
+    'deleteDeviceConfirm': '{name} will need to scan the pairing QR again to sync.',
   };
 }
 

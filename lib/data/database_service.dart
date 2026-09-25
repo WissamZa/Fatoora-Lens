@@ -12,6 +12,7 @@ import 'package:uuid/uuid.dart';
 import '../models/invoice.dart';
 import '../models/shop.dart';
 import '../models/shop_profile.dart';
+import '../models/sync_peer.dart';
 import '../services/seller_name_splitter.dart';
 
 class DatabaseService {
@@ -131,6 +132,19 @@ class DatabaseService {
     )
   ''';
 
+  static const String _syncPeersDdl = '''
+    CREATE TABLE IF NOT EXISTS sync_peers (
+      device_id TEXT PRIMARY KEY,
+      name TEXT NOT NULL DEFAULT '',
+      host_public_key TEXT,
+      pair_token TEXT,
+      last_ip TEXT,
+      last_port INTEGER,
+      last_role TEXT,
+      last_synced_at INTEGER
+    )
+  ''';
+
   static const String _syncLogDdl = '''
     CREATE TABLE IF NOT EXISTS sync_log (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -152,6 +166,7 @@ class DatabaseService {
     await database.execute(_mediaDdl);
     await database.execute(_syncStateDdl);
     await database.execute(_syncLogDdl);
+    await database.execute(_syncPeersDdl);
     await database.execute('''
       CREATE TABLE IF NOT EXISTS settings (
         key TEXT PRIMARY KEY,
@@ -551,6 +566,45 @@ class DatabaseService {
       profile.toMap(),
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+  }
+
+  /// Saved sync peers, alphabetically by display name.
+  Future<List<SyncPeer>> getSyncPeers() async {
+    final rows = await _db.query('sync_peers');
+    final peers = rows.map(SyncPeer.fromMap).toList()
+      ..sort((a, b) => a.displayName.compareTo(b.displayName));
+    return peers;
+  }
+
+  Future<void> upsertSyncPeer(SyncPeer peer) async {
+    await _db.insert(
+      'sync_peers',
+      peer.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<void> renameSyncPeer(String deviceId, String name) async {
+    await _db.update(
+      'sync_peers',
+      {'name': name.trim()},
+      where: 'device_id = ?',
+      whereArgs: [deviceId],
+    );
+  }
+
+  Future<void> deleteSyncPeer(String deviceId) async {
+    await _db.delete('sync_peers', where: 'device_id = ?', whereArgs: [deviceId]);
+  }
+
+  Future<SyncPeer?> syncPeerByDeviceId(String deviceId) async {
+    final rows = await _db.query(
+      'sync_peers',
+      where: 'device_id = ?',
+      whereArgs: [deviceId],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : SyncPeer.fromMap(rows.first);
   }
 
   Future<String?> getSetting(String key) async {

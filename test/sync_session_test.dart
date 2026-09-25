@@ -77,17 +77,30 @@ void main() {
 
   Future<(SyncSessionResult, SyncSessionResult)> runBoth(
     SyncSecureChannel host,
-    SyncSecureChannel guest,
-  ) async {
+    SyncSecureChannel guest, {
+    bool firstPairing = true,
+  }) async {
+    final peersA = await deviceA.getSyncPeers();
+    final peersB = await deviceB.getSyncPeers();
     final engineA = SyncSessionEngine(
       channel: host,
       database: deviceA,
       preferences: const SyncPreferences(),
+      hostRole: true,
+      issuePairToken: firstPairing,
+      expectedPeerDeviceId: firstPairing ? null : peersA.single.deviceId,
+      peerTokenLookup: firstPairing
+          ? null
+          : (peerId) async => peersA.single.pairToken,
     );
     final engineB = SyncSessionEngine(
       channel: guest,
       database: deviceB,
       preferences: const SyncPreferences(),
+      hostRole: false,
+      mySavedToken: firstPairing ? null : peersB.single.pairToken,
+      peerIp: '192.168.1.20',
+      peerPort: 8765,
     );
     final results = await Future.wait([engineA.run(), engineB.run()]);
     return (results[0], results[1]);
@@ -131,7 +144,11 @@ void main() {
     await guest.close();
 
     final (host2, guest2) = await pairDevices();
-    final (secondA, secondB) = await runBoth(host2, guest2);
+    final (secondA, secondB) = await runBoth(
+      host2,
+      guest2,
+      firstPairing: false,
+    );
     expect(secondA.success, isTrue);
     expect(secondA.sentInvoices, 0, reason: 'cursor already covers it');
     expect(secondB.sentInvoices, 0);
@@ -139,6 +156,45 @@ void main() {
     expect(secondB.receivedInvoices, 0);
     await host2.close();
     await guest2.close();
+  });
+
+  test('first pairing stores a shared token on both devices', () async {
+    await deviceA.insertInvoice(_invoice('receipt-1'));
+    final (host, guest) = await pairDevices();
+    final (resultA, resultB) = await runBoth(host, guest);
+    expect(resultA.success, isTrue);
+    expect(resultB.success, isTrue);
+
+    // Both devices saved the peer with the shared token.
+    final peersA = await deviceA.getSyncPeers();
+    final peersB = await deviceB.getSyncPeers();
+    expect(peersA, hasLength(1));
+    expect(peersB, hasLength(1));
+    expect(peersA.single.pairToken, isNotNull);
+    expect(peersB.single.pairToken, peersA.single.pairToken);
+    expect(peersB.single.lastRole, 'host', reason: 'A hosted the session');
+    expect(peersA.single.lastRole, 'guest');
+    expect(peersB.single.lastIp, '192.168.1.20');
+    expect(peersB.single.lastPort, 8765);
+    await host.close();
+    await guest.close();
+  });
+
+  test('renaming and deleting saved peers works', () async {
+    await deviceA.insertInvoice(_invoice('receipt-1'));
+    final (host, guest) = await pairDevices();
+    final (resultA, _) = await runBoth(host, guest);
+    expect(resultA.success, isTrue);
+    await host.close();
+    await guest.close();
+
+    final peers = await deviceA.getSyncPeers();
+    await deviceA.renameSyncPeer(peers.single.deviceId, 'هاتفي الثاني');
+    final renamed = await deviceA.getSyncPeers();
+    expect(renamed.single.displayName, 'هاتفي الثاني');
+
+    await deviceA.deleteSyncPeer(renamed.single.deviceId);
+    expect(await deviceA.getSyncPeers(), isEmpty);
   });
 
   test('tombstones propagate so both sides forget the deleted invoice',

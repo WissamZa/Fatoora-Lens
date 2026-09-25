@@ -208,8 +208,6 @@ class SyncSecureChannel implements SyncTransport {
         secretKey: _receiveKey,
       );
       _receiveCounter = expectedCounter;
-      // ignore: avoid_print
-      print('DEBUG chan recv ctr=$expectedCounter len=${clear.length}');
       final inner = SyncFrame.decodeBytes(Uint8List.fromList(clear));
       if (!_frameController.isClosed) _frameController.add(inner);
     } on SecretBoxAuthenticationError {
@@ -269,8 +267,6 @@ class SyncSecureChannel implements SyncTransport {
     out.setAll(0, box.cipherText);
     out.setAll(box.cipherText.length, box.mac.bytes);
     _sendCounter = counter;
-    // ignore: avoid_print
-    print('DEBUG chan[${sessionId.substring(0, 4)}] send ctr=$counter len=${out.length}');
     await _transport.sendBlob(seq: counter, bytes: out);
   }
 
