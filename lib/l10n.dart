@@ -153,6 +153,21 @@ class AppL10n {
     'testHandshake': 'المصافحة الأولية',
     'cloudTestPending':
         'ملاحظة: اختبار قناة السحابة البديلة (WebRTC عبر Firebase) يُضاف بعد تجهيز مشروع Firebase، وسيمر بنفس هذه الفحوص.',
+    'syncTitle': 'مزامنة الأجهزة',
+    'syncInvoicesToggle': 'مزامنة الفواتير',
+    'syncProfilesToggle': 'مزامنة أسماء المحلات والملاحظات',
+    'syncImagesToggle': 'مزامنة صور الفواتير',
+    'syncCloudToggle': 'المزامنة عبر السحابة عند تعذر الشبكة المحلية',
+    'syncCloudHint': 'يتطلب إعداد Firebase — القناة مشفرة طرف لطرف دائماً',
+    'syncHost': 'استضافة',
+    'syncJoin': 'انضمام',
+    'syncStarting': 'جارٍ بدء المزامنة...',
+    'syncWaitingPeer': 'بانتظار اتصال الجهاز الآخر على الشبكة نفسها',
+    'syncRunning': 'جارٍ تنفيذ المزامنة المشفرة...',
+    'syncDone': 'اكتملت المزامنة',
+    'syncFailed': 'فشلت المزامنة',
+    'syncQrHint': 'من الجهاز الآخر: افتح «مزامنة الأجهزة» واضغط «انضمام» ثم امسح هذا الرمز',
+    'syncBadQr': 'رمز QR ليس رمز اقتراز صالحاً لهذا التطبيق.',
   };
 
   static const _en = <String, String>{
@@ -299,6 +314,21 @@ class AppL10n {
     'testHandshake': 'Initial handshake',
     'cloudTestPending':
         'Note: the cloud fallback channel test (WebRTC over Firebase) is added once the Firebase project is configured, and runs the same checks.',
+    'syncTitle': 'Device sync',
+    'syncInvoicesToggle': 'Sync invoices',
+    'syncProfilesToggle': 'Sync shop names and notes',
+    'syncImagesToggle': 'Sync invoice images',
+    'syncCloudToggle': 'Cloud sync when the local network is unreachable',
+    'syncCloudHint': 'Requires Firebase setup — always end-to-end encrypted',
+    'syncHost': 'Host',
+    'syncJoin': 'Join',
+    'syncStarting': 'Starting sync...',
+    'syncWaitingPeer': 'Waiting for the other device on the same network',
+    'syncRunning': 'Running the encrypted sync...',
+    'syncDone': 'Sync completed',
+    'syncFailed': 'Sync failed',
+    'syncQrHint': 'On the other device: open Device sync, tap Join, and scan this code',
+    'syncBadQr': 'That QR is not a valid Fatoora Lens pairing code.',
   };
 }
 

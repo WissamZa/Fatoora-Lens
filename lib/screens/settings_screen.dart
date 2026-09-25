@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import '../config/app_info.dart';
+import '../data/database_service.dart';
 import '../l10n.dart';
 import 'connection_test_screen.dart';
+import 'sync_screen.dart';
 
 class SettingsTab extends StatelessWidget {
   const SettingsTab({
+    required this.database,
     required this.darkMode,
     required this.onToggleTheme,
     required this.onToggleLanguage,
@@ -17,6 +20,7 @@ class SettingsTab extends StatelessWidget {
     super.key,
   });
 
+  final DatabaseService database;
   final bool darkMode;
   final VoidCallback onToggleTheme;
   final VoidCallback onToggleLanguage;
@@ -68,6 +72,16 @@ class SettingsTab extends StatelessWidget {
         _ActionCard(icon: Icons.restore_outlined, title: tr(context, 'restore'), onTap: onRestore),
         const SizedBox(height: 10),
         _ActionCard(icon: Icons.picture_as_pdf_outlined, title: tr(context, 'pdf'), onTap: onPdf),
+        const SizedBox(height: 10),
+        _ActionCard(
+          icon: Icons.sync_rounded,
+          title: tr(context, 'syncTitle'),
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => SyncScreen(database: database),
+            ),
+          ),
+        ),
         const SizedBox(height: 10),
         _ActionCard(
           icon: Icons.wifi_tethering_rounded,

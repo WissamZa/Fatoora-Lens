@@ -361,6 +361,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ShopsTab(database: widget.database, shops: _shops, onChanged: _loadData),
       AnalysisTab(shops: _shops),
       SettingsTab(
+        database: widget.database,
         darkMode: widget.darkMode,
         onToggleTheme: widget.onToggleTheme,
         onToggleLanguage: widget.onToggleLanguage,
