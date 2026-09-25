@@ -82,7 +82,11 @@ class SyncRepository {
         orderBy: 'updated_at ASC',
       );
       for (final row in rows) {
-        invoices.add(_jsonSafe(row));
+        final outgoing = _jsonSafe(row);
+        // image_path is a per-device local path and is meaningless to the
+        // peer; the media pipeline addresses files by hash only.
+        outgoing['image_path'] = null;
+        invoices.add(outgoing);
         final sha = row['image_sha256'] as String?;
         if (preferences.syncImages &&
             sha != null &&

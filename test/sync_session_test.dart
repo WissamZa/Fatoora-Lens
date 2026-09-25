@@ -1,14 +1,17 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+
+import 'package:cryptography/cryptography.dart';
+import 'package:fatoora_lens/sync/security/sync_secure_channel.dart';
+import 'package:fatoora_lens/sync/transport/ws_transport.dart';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fatoora_lens/data/database_service.dart';
 import 'package:fatoora_lens/models/invoice.dart';
-import 'package:fatoora_lens/sync/security/sync_secure_channel.dart';
 import 'package:fatoora_lens/sync/sync_preferences.dart';
 import 'package:fatoora_lens/sync/sync_session.dart';
 import 'package:fatoora_lens/sync/transport/sync_transport.dart';
-import 'package:cryptography/cryptography.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 Future<DatabaseService> _openDb(Directory dir) async {
@@ -249,6 +252,77 @@ void main() {
     );
     await host.close();
     await guest.close();
+  });
+
+  test('full session with media over a real WebSocket', () async {
+    final server = WsServerTransport(port: 0);
+    final port = await server.start();
+    final imageFile = File('${dirA.path}/receipt.jpg');
+    await imageFile.writeAsBytes(
+      List<int>.generate(200 * 1024, (i) => i % 251),
+    );
+    await deviceA.insertInvoice(
+      _invoice('receipt-1').copyWith(imagePath: imageFile.path),
+    );
+
+    final client = WsClientTransport(
+      uri: Uri.parse('ws://127.0.0.1:$port/sync'),
+    );
+    await client.start();
+    final hostKeys = await X25519().newKeyPair();
+    final hostPublic = await hostKeys.extractPublicKey();
+    final hostFuture = SyncSecureChannel.establish(
+      transport: server,
+      side: SyncSide.host,
+      sessionId: 'ws-session',
+      hostStaticKeyPair: hostKeys,
+    );
+    final guestFuture = SyncSecureChannel.establish(
+      transport: client,
+      side: SyncSide.guest,
+      sessionId: 'ws-session',
+      hostPublicKey: Uint8List.fromList(hostPublic.bytes),
+    );
+    final channels = await Future.wait([hostFuture, guestFuture]);
+
+    final engineA = SyncSessionEngine(
+      channel: channels[0],
+      database: deviceA,
+      preferences: const SyncPreferences(),
+      hostRole: true,
+      issuePairToken: true,
+    );
+    final engineB = SyncSessionEngine(
+      channel: channels[1],
+      database: deviceB,
+      preferences: const SyncPreferences(),
+      hostRole: false,
+      peerHostPublicKeyB64: base64Encode(hostPublic.bytes),
+      peerIp: '127.0.0.1',
+      peerPort: port,
+    );
+    final results = await Future.wait(
+      [engineA.run(), engineB.run()],
+    ).timeout(const Duration(seconds: 60));
+
+    final aRow = (await deviceA.getInvoices())
+        .firstWhere((i) => i.rawPayload == 'receipt-1');
+    final bRow = (await deviceB.getInvoices())
+        .firstWhere((i) => i.rawPayload == 'receipt-1');
+    expect(aRow.imageSha256, bRow.imageSha256);
+    expect(results[0].success, isTrue, reason: 'A: ${results[0].error}');
+    expect(results[1].success, isTrue, reason: 'B: ${results[1].error}');
+    expect(results[1].mediaTransferred, 1);
+    final bInvoices = await deviceB.getInvoices();
+    final bImage = bInvoices
+        .singleWhere((invoice) => invoice.imagePath != null)
+        .imagePath!;
+    expect(File(bImage).lengthSync(), 200 * 1024);
+
+    await channels[0].close();
+    await channels[1].close();
+    await client.close();
+    await server.close();
   });
 
   test('custom shop names propagate to the other device', () async {
