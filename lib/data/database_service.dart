@@ -325,6 +325,11 @@ class DatabaseService {
     return database;
   }
 
+  /// Rebuilds the derived shops table from the current invoice rows. The
+  /// sync session calls this after merging rows straight into the
+  /// invoices table, bypassing insertInvoice/updateInvoice.
+  Future<void> refreshDerivedShops() => _syncShops(_db);
+
   /// The open database handle for the sync repositories, which run their
   /// own transactions against it.
   Database get syncDatabase => _db;
