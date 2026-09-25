@@ -95,6 +95,39 @@ void main() {
       await guest.close();
     });
 
+    test('mismatched local session ids do not break the channel', () async {
+      // Real devices stamp the session id with their own clock, so the
+      // two ends never share the same label. The channel must not derive
+      // any crypto material from it.
+      final (hostInner, guestInner) = LoopbackTransport.pair();
+      final hostKeys = await X25519().newKeyPair();
+      final hostPublic = await hostKeys.extractPublicKey();
+      final hostFuture = SyncSecureChannel.establish(
+        transport: hostInner,
+        side: SyncSide.host,
+        sessionId: 'sync-1758800000000',
+        hostStaticKeyPair: hostKeys,
+      );
+      final guestFuture = SyncSecureChannel.establish(
+        transport: guestInner,
+        side: SyncSide.guest,
+        sessionId: 'sync-1758800000413',
+        hostPublicKey: Uint8List.fromList(hostPublic.bytes),
+      );
+      final channels = await Future.wait([hostFuture, guestFuture]);
+      final host = channels[0];
+      final guest = channels[1];
+
+      final received = Completer<SyncFrame>();
+      final sub = host.frames.listen(received.complete);
+      await guest.sendControl(SyncFrame.kTypeHello, seq: 1, data: {'x': 1});
+      final frame = await received.future.timeout(const Duration(seconds: 5));
+      expect(frame.data['x'], 1);
+      await sub.cancel();
+      await host.close();
+      await guest.close();
+    });
+
     test('a tampered frame fails authentication and surfaces an error',
         () async {
       final (hostInner, guestInner) = LoopbackTransport.pair();

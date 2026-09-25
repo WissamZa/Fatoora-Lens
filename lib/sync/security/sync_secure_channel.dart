@@ -206,7 +206,6 @@ class SyncSecureChannel implements SyncTransport {
           mac: Mac(mac),
         ),
         secretKey: _receiveKey,
-        aad: utf8.encode(sessionId),
       );
       _receiveCounter = expectedCounter;
       // ignore: avoid_print
@@ -257,11 +256,14 @@ class SyncSecureChannel implements SyncTransport {
   Future<void> _sendEncrypted(List<int> clearBytes) async {
     if (_closed) throw StateError('Secure channel is closed.');
     final counter = _sendCounter + 1;
+    // No AAD on purpose: the direction keys are derived from a fresh
+    // ECDH per session, so a session id that the two peers might encode
+    // differently (e.g. timestamp-based) must not silently break the
+    // authentication tag. Counter nonces already isolate sessions.
     final box = await _aes.encrypt(
       clearBytes,
       secretKey: _sendKey,
       nonce: _nonce(counter),
-      aad: utf8.encode(sessionId),
     );
     final out = Uint8List(box.cipherText.length + box.mac.bytes.length);
     out.setAll(0, box.cipherText);
