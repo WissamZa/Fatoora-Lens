@@ -126,6 +126,7 @@ class SyncRepository {
     List<Map<String, Object?>> rows,
   ) async {
     final result = SyncMergeResult();
+    final mediaCandidates = <String>{};
     await database.transaction((txn) async {
       for (final rawRow in rows) {
         final row = _jsonSafe(rawRow);
@@ -141,15 +142,43 @@ class SyncRepository {
               crypto.sha256.convert(utf8.encode(rawPayload)).toString();
           row['payload_sha256'] = payloadSha;
         }
+        final incomingSha = ((row['image_sha256'] as String?) ?? '').trim();
 
         if (!isDeleted && payloadSha.isNotEmpty) {
           final duplicate = await txn.rawQuery(
-            'SELECT id FROM invoices WHERE payload_sha256 = ? '
-            'AND is_deleted = 0 AND id != ? LIMIT 1',
+            'SELECT id, image_sha256, note FROM invoices '
+            'WHERE payload_sha256 = ? AND is_deleted = 0 AND id != ? LIMIT 1',
             [payloadSha, id],
           );
           if (duplicate.isNotEmpty) {
             result.duplicatesSkipped++;
+            // Same physical receipt: keep the local row but adopt any
+            // missing metadata from the twin (image hash, note).
+            final local = duplicate.first;
+            final updates = <String, Object?>{};
+            final localSha = ((local['image_sha256'] as String?) ?? '').trim();
+            if (localSha.isEmpty && incomingSha.isNotEmpty) {
+              updates['image_sha256'] = incomingSha;
+            }
+            final localNote = ((local['note'] as String?) ?? '').trim();
+            final incomingNote = ((row['note'] as String?) ?? '').trim();
+            if (localNote.isEmpty && incomingNote.isNotEmpty) {
+              updates['note'] = incomingNote;
+            }
+            if (updates.isNotEmpty) {
+              final localId = local['id'] as String;
+              await txn.update(
+                'invoices',
+                updates,
+                where: 'id = ?',
+                whereArgs: [localId],
+              );
+              if (incomingSha.isNotEmpty) {
+                // The twin carried an image this device lacks: request it
+                // through the media pipeline.
+                mediaCandidates.add(incomingSha);
+              }
+            }
             await _log(txn, 'inbound', 'invoices', id, 'duplicate-skipped',
                 'payload $payloadSha already stored');
             continue;
@@ -166,8 +195,7 @@ class SyncRepository {
           final incomingUpdatedAt = (row['updated_at'] as num?)?.toInt() ?? 0;
           final localUpdatedAt =
               (existing.first['updated_at'] as num?)?.toInt() ?? 0;
-          final incomingDevice =
-              ((row['device_id'] as String?) ?? '');
+          final incomingDevice = ((row['device_id'] as String?) ?? '');
           final localDevice =
               ((existing.first['device_id'] as String?) ?? '');
           final incomingWins = incomingUpdatedAt > localUpdatedAt ||
@@ -185,15 +213,45 @@ class SyncRepository {
             conflictAlgorithm: ConflictAlgorithm.replace,
           );
           result.overwritten++;
-          await _recordMediaNeeded(result, txn, row, existing.first);
-          continue;
+        } else {
+          await txn.insert('invoices', row);
+          result.applied++;
         }
-
-        await txn.insert('invoices', row);
-        result.applied++;
-        await _recordMediaNeeded(result, txn, row, null);
+        if (!isDeleted && incomingSha.isNotEmpty) {
+          mediaCandidates.add(incomingSha);
+        }
       }
     });
+    // Media bookkeeping runs outside the write transaction on purpose:
+    // file probes have no business holding the database lock.
+    for (final sha in mediaCandidates) {
+      var localPath = await _mediaLocalPath(sha);
+      if (localPath == null) {
+        // Fall back to the path recorded on the invoice row itself.
+        final rowsWithSha = await database.query(
+          'invoices',
+          columns: ['image_path'],
+          where: 'image_sha256 = ? AND is_deleted = 0',
+          whereArgs: [sha],
+          limit: 1,
+        );
+        if (rowsWithSha.isNotEmpty) {
+          localPath = rowsWithSha.first['image_path'] as String?;
+        }
+      }
+      final hasFile = localPath != null &&
+          localPath.isNotEmpty &&
+          File(localPath).existsSync();
+      if (!hasFile) {
+        if (!result.mediaNeeded.contains(sha)) result.mediaNeeded.add(sha);
+      } else {
+        await database.execute(
+          "UPDATE invoices SET image_path = ? WHERE image_sha256 = ? "
+          "AND (image_path IS NULL OR image_path = '')",
+          [localPath, sha],
+        );
+      }
+    }
     return result;
   }
 
@@ -290,50 +348,18 @@ class SyncRepository {
     });
   }
 
-  Future<void> _recordMediaNeeded(
-    SyncMergeResult result,
-    DatabaseExecutor txn,
-    Map<String, Object?> incoming,
-    Map<String, Object?>? existing,
-  ) async {
-    final sha = ((incoming['image_sha256'] as String?) ?? '').trim();
-    if (sha.isEmpty) return;
-    if ((incoming['is_deleted'] as num? ?? 0) != 0) return;
-    // Keep the local path when the incoming row replaces a local one that
-    // already has the file.
-    if (existing != null) {
-      final existingSha = ((existing['image_sha256'] as String?) ?? '').trim();
-      final existingPath = existing['image_path'] as String?;
-      if (existingSha == sha &&
-          existingPath != null &&
-          existingPath.isNotEmpty &&
-          File(existingPath).existsSync()) {
-        await txn.update(
-          'invoices',
-          {'image_path': existingPath},
-          where: 'id = ?',
-          whereArgs: [incoming['id']],
-        );
-        return;
-      }
-    }
-    final media = await txn.query(
+  /// The local path of a stored media file, or null when this device has
+  /// no record (or the file disappeared).
+  Future<String?> _mediaLocalPath(String sha) async {
+    final rows = await database.query(
       'media',
+      columns: ['local_path'],
       where: 'sha256 = ?',
       whereArgs: [sha],
       limit: 1,
     );
-    final localPath = media.isEmpty ? null : media.first['local_path'] as String?;
-    if (localPath == null || localPath.isEmpty || !File(localPath).existsSync()) {
-      if (!result.mediaNeeded.contains(sha)) result.mediaNeeded.add(sha);
-    } else {
-      await txn.update(
-        'invoices',
-        {'image_path': localPath},
-        where: 'id = ?',
-        whereArgs: [incoming['id']],
-      );
-    }
+    if (rows.isEmpty) return null;
+    return rows.first['local_path'] as String?;
   }
 }
 

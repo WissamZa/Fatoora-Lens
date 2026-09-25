@@ -161,6 +161,40 @@ void main() {
     await guest2.close();
   });
 
+  test('invoice images transfer to the device that lacks them', () async {
+    final imageBytes = List<int>.generate(3000, (i) => i % 251);
+    final imageFile = File('${dirA.path}/receipt.jpg');
+    await imageFile.writeAsBytes(imageBytes);
+    await deviceA.insertInvoice(
+      _invoice('receipt-1').copyWith(imagePath: imageFile.path),
+    );
+    // Device B scanned the same paper receipt but has no photo attached.
+    await deviceB.insertInvoice(_invoice('receipt-1'));
+
+    final (host, guest) = await pairDevices();
+    final (resultA, resultB) = await runBoth(host, guest);
+
+    expect(resultA.success, isTrue, reason: 'A: ${resultA.error}');
+    expect(resultB.success, isTrue, reason: 'B: ${resultB.error}');
+
+    // The duplicate row kept by B adopted the image hash from A, the file
+    // arrived through the media phase, and the path is wired up.
+    expect(resultB.duplicatesSkipped, 1);
+    expect(resultB.mediaTransferred, 1);
+    final bInvoices = await deviceB.getInvoices();
+    final bImage = bInvoices
+        .singleWhere((invoice) => invoice.imagePath != null)
+        .imagePath!;
+    final stored = await File(bImage).readAsBytes();
+    expect(stored, orderedEquals(imageBytes));
+    expect(
+      bInvoices.every((invoice) => (invoice.imageSha256 ?? '').isNotEmpty),
+      isTrue,
+    );
+    await host.close();
+    await guest.close();
+  });
+
   test('custom shop names propagate to the other device', () async {
     await deviceA.insertInvoice(_invoice('receipt-1'));
     final shops = await deviceA.getShops();

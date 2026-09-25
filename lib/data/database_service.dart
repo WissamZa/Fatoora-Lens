@@ -330,6 +330,60 @@ class DatabaseService {
   /// invoices table, bypassing insertInvoice/updateInvoice.
   Future<void> refreshDerivedShops() => _syncShops(_db);
 
+  /// Stores received media content after verifying its SHA-256, wires the
+  /// local path into every invoice referencing the hash, and returns
+  /// whether the file was accepted.
+  Future<bool> storeMediaFile(String sha, List<int> bytes) async {
+    if (!_isSha256Hex(sha)) return false;
+    final computed = crypto.sha256.convert(bytes).toString();
+    if (computed != sha) return false;
+    final mediaDir = _mediaDirectoryPath;
+    if (mediaDir == null) return false;
+    final directory = Directory(mediaDir);
+    if (!directory.existsSync()) directory.createSync(recursive: true);
+    final partFile = File('$mediaDir${p.separator}$sha.part');
+    await partFile.writeAsBytes(bytes, flush: true);
+    final target = File('$mediaDir${p.separator}$sha');
+    if (target.existsSync()) {
+      await partFile.delete();
+    } else {
+      await partFile.rename(target.path);
+    }
+    await _db.insert(
+      'media',
+      MediaRecord(
+        sha256: sha,
+        bytes: bytes.length,
+        localPath: target.path,
+        updatedAt: DateTime.now().millisecondsSinceEpoch,
+      ).toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+    await _db.update(
+      'invoices',
+      {'image_path': target.path},
+      where: 'image_sha256 = ?',
+      whereArgs: [sha],
+    );
+    return true;
+  }
+
+  /// The local path of a stored media file, or null when this device does
+  /// not have it (no record or the file disappeared).
+  Future<String?> mediaFilePath(String sha) async {
+    final rows = await _db.query(
+      'media',
+      where: 'sha256 = ?',
+      whereArgs: [sha],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    final path = rows.first['local_path'] as String?;
+    if (path == null || path.isEmpty) return null;
+    if (!File(path).existsSync()) return null;
+    return path;
+  }
+
   /// The open database handle for the sync repositories, which run their
   /// own transactions against it.
   Database get syncDatabase => _db;
