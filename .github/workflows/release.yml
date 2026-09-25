@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag, for example v1.0.0'
+        description: 'Release tag, for example v1.0.0 or v1.0.0-dev-1'
         required: true
         type: string
 
@@ -41,14 +41,16 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Validate release version
+      - name: Validate release tag
         run: |
           set -euo pipefail
-          app_version="${RELEASE_TAG#v}"
-          if [[ "${RELEASE_TAG}" != v* || ! "${app_version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]]; then
-            echo "Invalid release tag: ${RELEASE_TAG}. Expected a tag such as v1.0.6." >&2
+
+          if [[ ! "${RELEASE_TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-dev-[0-9]+)?$ ]]; then
+            echo "Invalid release tag: ${RELEASE_TAG}. Expected a tag like v1.0.6 or v1.0.6-dev-1." >&2
             exit 1
           fi
+
+          app_version="${RELEASE_TAG#v}"
           echo "Building Fatoora Lens ${app_version}"
 
       - name: Run tests
@@ -83,9 +85,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
         run: |
+          set -euo pipefail
           shopt -s nullglob
 
-          # Rename generated APK files to append the tag version
           for file in build/app/outputs/flutter-apk/*.apk; do
             if [ -f "$file" ]; then
               base_name=$(basename "$file" .apk)
@@ -123,7 +125,7 @@ jobs:
           for file in "${apk_files[@]}"; do
             file_name=$(basename "$file")
             gh api --method POST \
-              -H "Content-Type: application/vnd.android.package-archive" \
+              --header "Content-Type: application/vnd.android.package-archive" \
               --input "$file" \
               "${upload_url}?name=${file_name}" >/dev/null
           done
@@ -136,6 +138,7 @@ jobs:
             fi
             sleep 3
           done
+
           if [ "$actual_assets" -ne "$expected_assets" ]; then
             echo "Expected ${expected_assets} APK release assets, found ${actual_assets}" >&2
             exit 1
@@ -144,5 +147,5 @@ jobs:
       - name: Upload symbols as workflow artifact
         uses: actions/upload-artifact@v7.0.1
         with:
-          name: android-symbols-${{ github.ref_name }}
+          name: android-symbols-${{ env.RELEASE_TAG }}
           path: build/symbols
