@@ -4,7 +4,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:fatoora_lens/app.dart';
 import 'package:fatoora_lens/data/database_service.dart';
 import 'package:fatoora_lens/models/invoice.dart';
+import 'package:fatoora_lens/models/payment_method.dart';
 import 'package:fatoora_lens/models/shop.dart';
+import 'package:fatoora_lens/models/shop_category.dart';
 import 'package:fatoora_lens/screens/home_screen.dart';
 
 class _FakeDatabase extends DatabaseService {
@@ -16,6 +18,15 @@ class _FakeDatabase extends DatabaseService {
 
   @override
   Future<List<Shop>> getShops() async => <Shop>[];
+
+  @override
+  Future<List<ShopCategory>> getShopCategories() async => <ShopCategory>[];
+
+  @override
+  Future<List<PaymentMethod>> getPaymentMethods() async => <PaymentMethod>[];
+
+  @override
+  Future<List<PaymentCard>> getPaymentCards() async => <PaymentCard>[];
 
   @override
   Future<String?> getSetting(String key) async => null;

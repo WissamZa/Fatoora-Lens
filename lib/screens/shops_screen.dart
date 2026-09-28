@@ -3,21 +3,33 @@ import 'package:flutter/material.dart';
 import '../data/database_service.dart';
 import '../l10n.dart';
 import '../models/shop.dart';
+import '../models/shop_category.dart';
+import '../widgets/catalog_pickers.dart';
 import '../widgets/invoice_tile.dart';
 import '../widgets/invoice_editor.dart';
+import '../widgets/picker_icons.dart';
 import '../widgets/sar_symbol.dart';
 
 class ShopsTab extends StatelessWidget {
   const ShopsTab({
     required this.database,
     required this.shops,
+    required this.categories,
     required this.onChanged,
     super.key,
   });
 
   final DatabaseService database;
   final List<Shop> shops;
+  final List<ShopCategory> categories;
   final VoidCallback onChanged;
+
+  ShopCategory? _categoryFor(Shop shop) {
+    for (final category in categories) {
+      if (category.id == shop.categoryId) return category;
+    }
+    return null;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -30,6 +42,7 @@ class ShopsTab extends StatelessWidget {
       separatorBuilder: (_, index) => const SizedBox(height: 10),
       itemBuilder: (context, index) {
         final shop = shops[index];
+        final category = _categoryFor(shop);
         return Card(
           child: ListTile(
             contentPadding: const EdgeInsets.symmetric(
@@ -40,7 +53,9 @@ class ShopsTab extends StatelessWidget {
               radius: 25,
               backgroundColor: Theme.of(context).colorScheme.primaryContainer,
               child: Icon(
-                Icons.storefront_rounded,
+                category == null
+                    ? Icons.storefront_rounded
+                    : catalogIcon(category.icon),
                 color: Theme.of(context).colorScheme.primary,
               ),
             ),
@@ -51,6 +66,16 @@ class ShopsTab extends StatelessWidget {
             subtitle: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (category != null)
+                  Text(
+                    category.displayName(english: AppL10n.isEnglish(context)),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.primary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                 if (shop.hasCustomName && shop.nameAr.isNotEmpty)
                   Text(
                     '${tr(context, 'shopNameInInvoice')}: ${shop.nameAr}',
@@ -97,8 +122,11 @@ class ShopsTab extends StatelessWidget {
             onTap: () async {
               await Navigator.of(context).push(
                 MaterialPageRoute(
-                  builder: (_) =>
-                      ShopDetailsScreen(database: database, shop: shop),
+                  builder: (_) => ShopDetailsScreen(
+                    database: database,
+                    shop: shop,
+                    categories: categories,
+                  ),
                 ),
               );
               onChanged();
@@ -114,11 +142,13 @@ class ShopDetailsScreen extends StatefulWidget {
   const ShopDetailsScreen({
     required this.database,
     required this.shop,
+    required this.categories,
     super.key,
   });
 
   final DatabaseService database;
   final Shop shop;
+  final List<ShopCategory> categories;
 
   @override
   State<ShopDetailsScreen> createState() => _ShopDetailsScreenState();
@@ -133,9 +163,35 @@ class _ShopDetailsScreenState extends State<ShopDetailsScreen> {
     _shop = widget.shop;
   }
 
+  ShopCategory? get _category {
+    for (final category in widget.categories) {
+      if (category.id == _shop.categoryId) return category;
+    }
+    return null;
+  }
+
+  Future<void> _pickCategory() async {
+    final result = await showCategoryPickerSheet(
+      context,
+      database: widget.database,
+      selectedCategoryId: _shop.categoryId,
+    );
+    if (result == null || !mounted) return;
+    await widget.database.setShopCategory(
+      vatNumber: _shop.vatNumber,
+      nameAr: _shop.nameAr,
+      categoryId: result.cleared ? null : result.categoryId,
+    );
+    await _reload();
+  }
+
   Future<void> _editInvoice(int index) async {
     final previous = _shop.invoices[index];
-    final updated = await showInvoiceEditor(context, previous);
+    final updated = await showInvoiceEditor(
+      context,
+      previous,
+      database: widget.database,
+    );
     if (updated == null) return;
     await widget.database.updateInvoice(updated);
     await deleteReplacedInvoiceImage(previous, updated);
@@ -277,6 +333,29 @@ class _ShopDetailsScreenState extends State<ShopDetailsScreen> {
                       '${tr(context, 'vatNumber')}: ${_shop.vatNumber}',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
+                  const SizedBox(height: 10),
+                  InkWell(
+                    borderRadius: BorderRadius.circular(14),
+                    onTap: _pickCategory,
+                    child: InputDecorator(
+                      decoration: InputDecoration(
+                        labelText: tr(context, 'shopCategory'),
+                        prefixIcon: Icon(
+                          _category == null
+                              ? Icons.category_outlined
+                              : catalogIcon(_category!.icon),
+                        ),
+                        suffixIcon:
+                            const Icon(Icons.keyboard_arrow_down_rounded),
+                      ),
+                      child: Text(
+                        _category?.displayName(
+                              english: AppL10n.isEnglish(context),
+                            ) ??
+                            tr(context, 'uncategorized'),
+                      ),
+                    ),
+                  ),
                   const SizedBox(height: 14),
                   Row(
                     children: [

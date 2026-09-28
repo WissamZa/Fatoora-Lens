@@ -94,7 +94,11 @@ class _AllInvoicesScreenState extends State<AllInvoicesScreen> {
   }
 
   Future<void> _editInvoice(Invoice invoice) async {
-    final updated = await showInvoiceEditor(context, invoice);
+    final updated = await showInvoiceEditor(
+      context,
+      invoice,
+      database: widget.database,
+    );
     if (updated == null) return;
     await widget.database.updateInvoice(updated);
     await deleteReplacedInvoiceImage(invoice, updated);

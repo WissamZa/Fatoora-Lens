@@ -9,6 +9,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:share_plus/share_plus.dart';
 
 import '../models/invoice.dart';
+import '../models/payment_method.dart';
 import '../models/shop.dart';
 import 'zatca_qr_parser.dart';
 
@@ -21,10 +22,36 @@ class ExportService {
     List<Invoice> invoices, {
     required bool english,
     List<Shop> shops = const [],
+    List<PaymentMethod> methods = const [],
+    List<PaymentCard> cards = const [],
   }) async {
     final headers = english
-        ? ['Shop', 'Invoice no.', 'VAT number', 'Date', 'Time', 'Amount', 'Tax', 'Note']
-        : ['اسم المحل', 'رقم الفاتورة', 'الرقم الضريبي', 'التاريخ', 'الوقت', 'المبلغ', 'الضريبة', 'ملاحظة'];
+        ? ['Shop', 'Invoice no.', 'VAT number', 'Date', 'Time', 'Amount', 'Tax', 'Payment method', 'Card', 'Note']
+        : ['اسم المحل', 'رقم الفاتورة', 'الرقم الضريبي', 'التاريخ', 'الوقت', 'المبلغ', 'الضريبة', 'طريقة الدفع', 'البطاقة', 'ملاحظة'];
+    String methodName(String? id) {
+      if (id == null || id.isEmpty) return '';
+      for (final method in methods) {
+        if (method.id == id) return method.displayName(english: english);
+      }
+      return '';
+    }
+
+    String cardLabel(Invoice invoice) {
+      final last4 = (invoice.cardLast4 ?? '').trim();
+      if (last4.isEmpty) return '';
+      var name = '';
+      final cardId = invoice.cardId;
+      if (cardId != null) {
+        for (final card in cards) {
+          if (card.id == cardId) {
+            name = card.name;
+            break;
+          }
+        }
+      }
+      return name.isEmpty ? '•••• $last4' : '$name •••• $last4';
+    }
+
     final rows = <List<Object?>>[
       headers,
       ...invoices.map((invoice) => [
@@ -35,6 +62,8 @@ class ExportService {
             ZatcaQrParser.formatTime(invoice.issuedAt),
             invoice.totalAmount.toStringAsFixed(2),
             invoice.vatAmount.toStringAsFixed(2),
+            methodName(invoice.paymentMethodId),
+            cardLabel(invoice),
             invoice.note,
           ]),
     ];

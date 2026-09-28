@@ -15,8 +15,10 @@ class SyncSessionResult {
   String? peerDeviceId;
   int sentInvoices = 0;
   int sentProfiles = 0;
+  int sentExtras = 0;
   int receivedInvoices = 0;
   int receivedProfiles = 0;
+  int receivedExtras = 0;
   int applied = 0;
   int overwritten = 0;
   int keptLocal = 0;
@@ -30,7 +32,8 @@ class SyncSessionResult {
         'peer': peerDeviceId ?? '',
         'sentInvoices': sentInvoices,
         'sentProfiles': sentProfiles,
-        'received': receivedInvoices + receivedProfiles,
+        'sentExtras': sentExtras,
+        'received': receivedInvoices + receivedProfiles + receivedExtras,
         'applied': applied,
         'overwritten': overwritten,
         'keptLocal': keptLocal,
@@ -199,6 +202,8 @@ class SyncSessionEngine {
   /// The protocol step that failed, reported inside [SyncSessionResult.error].
   String _step = 'start';
   String? _expectedPeerToken;
+  /// The peer's advertised sync protocol version for this session.
+  int _peerProto = 1;
   final Completer<void> peerVerified = Completer<void>();
   final Completer<String> pairTokenReceived = Completer<String>();
 
@@ -316,18 +321,24 @@ class SyncSessionEngine {
         onProgress?.call(result, phase, detail);
 
     try {
-      // 1. Exchange session metadata.
+      // 1. Exchange session metadata. `proto` advertises the sync
+      // protocol version; legacy builds never send it, so a missing
+      // value means the peer cannot consume the v8 catalog.
       await channel.sendControl(
         _metaFrame,
         seq: _nextSeq,
         data: {
           'deviceId': database.deviceId ?? '',
           'prefs': preferences.toJson(),
+          'proto': kSyncProto,
         },
       );
       final peerMeta = await metaReady.future;
       final peerId = (peerMeta['deviceId'] as String?) ?? '';
       result.peerDeviceId = peerId;
+      final peerProto = (peerMeta['proto'] as num?)?.toInt() ?? 1;
+      _peerProto = peerProto;
+      final peerIsLegacy = peerProto < 2;
       emit('meta', '');
       if (expectedPeerDeviceId != null && peerId != expectedPeerDeviceId) {
         throw const SyncChannelException(
@@ -351,26 +362,60 @@ class SyncSessionEngine {
       }
       _step = 'meta';
 
-      // 2. Build and stream our outbound payload (scope = our own prefs).
+      // A changed peer protocol version (typically the peer app was
+      // upgraded) resets the cursors once so the full payload re-sends
+      // and any rows column-filtered for the older version heal.
+      if (peerId.isNotEmpty) {
+        final savedPeer = await database.syncPeerByDeviceId(peerId);
+        if (savedPeer != null && savedPeer.syncProto != peerProto) {
+          _step = 'cursor-reset';
+          await repo.resetCursors(peerId);
+        }
+      }
+
+      // 2. Build and stream our outbound payload (scope = our own prefs,
+      // shape = what this peer can consume).
       _step = 'payload';
-      final payload = await repo.buildOutboundPayload(peerId, preferences);
+      final payload = await repo.buildOutboundPayload(
+        peerId,
+        preferences,
+        peerProto: peerProto,
+      );
       result.sentInvoices = payload.invoices.length;
       result.sentProfiles = payload.profiles.length;
-      final totalOut = result.sentInvoices + result.sentProfiles;
+      result.sentExtras =
+          payload.categories.length + payload.paymentMethods.length + payload.cards.length;
+      final totalOut =
+          result.sentInvoices + result.sentProfiles + result.sentExtras;
       await _sendBatches('invoices', payload.invoices, (sent) {
         emit('payload', '$sent/$totalOut');
       });
       await _sendBatches('profiles', payload.profiles, (sent) {
         emit('payload', '$sent/$totalOut');
       });
+      if (!peerIsLegacy) {
+        // Never sent to legacy peers: they would merge unknown kinds into
+        // the invoices table.
+        await _sendBatches('categories', payload.categories, (sent) {
+          emit('payload', '$sent/$totalOut');
+        });
+        await _sendBatches('payment_methods', payload.paymentMethods, (sent) {
+          emit('payload', '$sent/$totalOut');
+        });
+        await _sendBatches('payment_cards', payload.cards, (sent) {
+          emit('payload', '$sent/$totalOut');
+        });
+      }
       await channel.sendControl(_dataEndFrame, seq: _nextSeq);
 
       // 3. Wait for the peer's data; the chain merges it in order.
       _step = 'receive';
-      emit('receive', '${result.receivedInvoices + result.receivedProfiles}');
+      emit('receive',
+          '${result.receivedInvoices + result.receivedProfiles + result.receivedExtras}');
       await peerDataEnd.future;
       await processing;
-      emit('receive', '${result.receivedInvoices + result.receivedProfiles}');
+      emit('receive',
+          '${result.receivedInvoices + result.receivedProfiles + result.receivedExtras}');
       // Merged rows bypass insertInvoice, so the derived shops table must
       // be rebuilt before anything reads it.
       await database.refreshDerivedShops();
@@ -450,6 +495,7 @@ class SyncSessionEngine {
         await repo.advanceCursors(
           peerId,
           DateTime.now().millisecondsSinceEpoch,
+          includeExtras: !peerIsLegacy,
         );
       }
       await channel.sendControl(_byeFrame, seq: _nextSeq);
@@ -486,6 +532,7 @@ class SyncSessionEngine {
       lastPort: lastPort,
       hostPublicKeyB64: peerHostPublicKeyB64,
       lastSyncedAt: DateTime.now().millisecondsSinceEpoch,
+      syncProto: _peerProto,
     );
     await database.upsertSyncPeer(peer);
   }
@@ -592,25 +639,46 @@ class SyncSessionEngine {
         case _ByeEvent():
           break;
         case _RowsEvent(:final kind, :final rows):
-          if (kind == 'profiles') {
-            final merged = await repo.mergeShopProfiles(rows);
-            result.receivedProfiles += rows.length;
-            result.applied += merged.applied;
-            result.overwritten += merged.overwritten;
-            result.keptLocal += merged.keptLocal;
-          } else {
-            final merged = await repo.mergeInvoices(rows);
-            result.receivedInvoices += rows.length;
-            result.applied += merged.applied;
-            result.overwritten += merged.overwritten;
-            result.keptLocal += merged.keptLocal;
-            result.duplicatesSkipped += merged.duplicatesSkipped;
-            for (final sha in merged.mediaNeeded) {
-              if (!result.mediaNeeded.contains(sha)) {
-                result.mediaNeeded.add(sha);
+          switch (kind) {
+            case 'profiles':
+              final merged = await repo.mergeShopProfiles(rows);
+              result.receivedProfiles += rows.length;
+              result.applied += merged.applied;
+              result.overwritten += merged.overwritten;
+              result.keptLocal += merged.keptLocal;
+            case 'categories':
+              final merged = await repo.mergeShopCategories(rows);
+              result.receivedExtras += rows.length;
+              result.applied += merged.applied;
+              result.overwritten += merged.overwritten;
+              result.keptLocal += merged.keptLocal;
+            case 'payment_methods':
+              final merged = await repo.mergePaymentMethods(rows);
+              result.receivedExtras += rows.length;
+              result.applied += merged.applied;
+              result.overwritten += merged.overwritten;
+              result.keptLocal += merged.keptLocal;
+            case 'payment_cards':
+              final merged = await repo.mergePaymentCards(rows);
+              result.receivedExtras += rows.length;
+              result.applied += merged.applied;
+              result.overwritten += merged.overwritten;
+              result.keptLocal += merged.keptLocal;
+            default:
+              // Legacy peers fold every unknown kind here too, which is
+              // exactly why new kinds are never sent to them.
+              final merged = await repo.mergeInvoices(rows);
+              result.receivedInvoices += rows.length;
+              result.applied += merged.applied;
+              result.overwritten += merged.overwritten;
+              result.keptLocal += merged.keptLocal;
+              result.duplicatesSkipped += merged.duplicatesSkipped;
+              for (final sha in merged.mediaNeeded) {
+                if (!result.mediaNeeded.contains(sha)) {
+                  result.mediaNeeded.add(sha);
+                }
               }
-            }
-            emitReceive();
+              emitReceive();
           }
         case _MediaStartEvent(:final sha, :final chunks):
           _media.start(sha, chunks);

@@ -8,6 +8,7 @@ class Shop {
     this.displayName = '',
     required this.vatNumber,
     required this.note,
+    this.categoryId,
     required this.invoices,
   });
 
@@ -27,6 +28,10 @@ class Shop {
   /// the same shop even when their seller names differ.
   final String vatNumber;
   final String note;
+
+  /// The shop's category (supermarket, barber...) from its profile;
+  /// null when uncategorized or the category was deleted.
+  final String? categoryId;
   final List<Invoice> invoices;
 
   String get name => displayName.isNotEmpty

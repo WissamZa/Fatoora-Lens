@@ -10,7 +10,9 @@ import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 
 import '../models/invoice.dart';
+import '../models/payment_method.dart';
 import '../models/shop.dart';
+import '../models/shop_category.dart';
 import '../models/shop_profile.dart';
 import '../models/sync_peer.dart';
 import '../services/seller_name_splitter.dart';
@@ -28,7 +30,13 @@ class DatabaseService {
   /// Schema 7 re-keyed invoices on UUID v4, added sync bookkeeping
   /// (device_id / updated_at / is_synced / is_deleted), moved user shop
   /// metadata into shop_profiles, and added media/sync_state/sync_log.
-  static const int _schemaVersion = 7;
+  ///
+  /// Schema 8 adds the shop catalog: shop_categories, payment_methods and
+  /// payment_cards tables (pre-seeded, user-extensible), a per-shop
+  /// category_id on shop_profiles, and payment_method_id/card_id/card_last4
+  /// on invoices. Everything lands through the same idempotent
+  /// ensure-schema path, so existing rows are never touched.
+  static const int _schemaVersion = 8;
   static const String _deviceIdSettingKey = 'device_id';
 
   Future<void> initialize() async {
@@ -106,9 +114,55 @@ class DatabaseService {
       name_en TEXT NOT NULL DEFAULT '',
       display_name TEXT NOT NULL DEFAULT '',
       note TEXT NOT NULL DEFAULT '',
+      category_id TEXT,
       updated_at INTEGER NOT NULL DEFAULT 0,
       is_synced INTEGER NOT NULL DEFAULT 0,
       is_deleted INTEGER NOT NULL DEFAULT 0
+    )
+  ''';
+
+  static const String _shopCategoriesDdl = '''
+    CREATE TABLE IF NOT EXISTS shop_categories (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL DEFAULT '',
+      name_en TEXT NOT NULL DEFAULT '',
+      icon TEXT NOT NULL DEFAULT '',
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      device_id TEXT NOT NULL DEFAULT '',
+      updated_at INTEGER NOT NULL DEFAULT 0,
+      is_synced INTEGER NOT NULL DEFAULT 0,
+      is_deleted INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT ''
+    )
+  ''';
+
+  static const String _paymentMethodsDdl = '''
+    CREATE TABLE IF NOT EXISTS payment_methods (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL DEFAULT '',
+      name_en TEXT NOT NULL DEFAULT '',
+      icon TEXT NOT NULL DEFAULT '',
+      requires_card INTEGER NOT NULL DEFAULT 0,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      device_id TEXT NOT NULL DEFAULT '',
+      updated_at INTEGER NOT NULL DEFAULT 0,
+      is_synced INTEGER NOT NULL DEFAULT 0,
+      is_deleted INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT ''
+    )
+  ''';
+
+  static const String _paymentCardsDdl = '''
+    CREATE TABLE IF NOT EXISTS payment_cards (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL DEFAULT '',
+      description TEXT NOT NULL DEFAULT '',
+      last4 TEXT NOT NULL DEFAULT '',
+      device_id TEXT NOT NULL DEFAULT '',
+      updated_at INTEGER NOT NULL DEFAULT 0,
+      is_synced INTEGER NOT NULL DEFAULT 0,
+      is_deleted INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT ''
     )
   ''';
 
@@ -141,7 +195,8 @@ class DatabaseService {
       last_ip TEXT,
       last_port INTEGER,
       last_role TEXT,
-      last_synced_at INTEGER
+      last_synced_at INTEGER,
+      sync_proto INTEGER NOT NULL DEFAULT 0
     )
   ''';
 
@@ -173,6 +228,19 @@ class DatabaseService {
         value TEXT NOT NULL
       )
     ''');
+    await database.execute(_shopCategoriesDdl);
+    await database.execute(_paymentMethodsDdl);
+    await database.execute(_paymentCardsDdl);
+
+    // Columns added after their table first shipped land through the same
+    // idempotent ALTER path; existing rows keep their data.
+    await _ensureTableColumns(database, 'shop_profiles', [
+      ('category_id', 'category_id TEXT'),
+    ]);
+    await _ensureTableColumns(database, 'sync_peers', [
+      ('sync_proto', 'sync_proto INTEGER NOT NULL DEFAULT 0'),
+    ]);
+    await _seedCatalog(database);
 
     final invoiceColumns = await database.rawQuery('PRAGMA table_info(invoices)');
     if (invoiceColumns.isEmpty) {
@@ -233,6 +301,44 @@ class DatabaseService {
     await addIfMissing('updated_at', 'updated_at INTEGER NOT NULL DEFAULT 0');
     await addIfMissing('is_synced', 'is_synced INTEGER NOT NULL DEFAULT 0');
     await addIfMissing('is_deleted', 'is_deleted INTEGER NOT NULL DEFAULT 0');
+    await addIfMissing('payment_method_id', 'payment_method_id TEXT');
+    await addIfMissing('card_id', 'card_id TEXT');
+    await addIfMissing('card_last4', 'card_last4 TEXT');
+  }
+
+  /// Adds any missing column of [columns] (name, DDL) to an already
+  /// existing [table]; data-preserving and idempotent.
+  Future<void> _ensureTableColumns(
+    DatabaseExecutor database,
+    String table,
+    List<(String, String)> columns,
+  ) async {
+    final existing = await database.rawQuery('PRAGMA table_info($table)');
+    for (final (name, ddl) in columns) {
+      if (!existing.any((row) => row['name'] == name)) {
+        await database.execute('ALTER TABLE $table ADD COLUMN $ddl');
+      }
+    }
+  }
+
+  /// Installs the pre-seeded shop categories and payment methods. Fixed
+  /// seed ids plus INSERT OR IGNORE mean a seed never duplicates or
+  /// resurrects after a sync or a local deletion (tombstones win).
+  Future<void> _seedCatalog(DatabaseExecutor database) async {
+    for (final seed in ShopCategory.seeds) {
+      await database.insert(
+        'shop_categories',
+        seed.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.ignore,
+      );
+    }
+    for (final seed in PaymentMethod.seeds) {
+      await database.insert(
+        'payment_methods',
+        seed.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.ignore,
+      );
+    }
   }
 
   /// Converts the pre-7 invoices table (integer auto-increment ids) to the
@@ -446,6 +552,7 @@ class DatabaseService {
       if (shopInvoices.isEmpty) continue;
       final profile = profiles[ShopProfile.keyFor(vatNumber: vat, nameAr: nameAr)];
       final profileDeleted = profile != null && ((profile['is_deleted'] as num?) ?? 0) != 0;
+      final categoryId = (profile?['category_id'] as String?)?.trim();
       shops.add(
         Shop(
           id: row['id'] as int,
@@ -456,6 +563,9 @@ class DatabaseService {
               : ((profile?['display_name'] as String?) ?? '').trim(),
           vatNumber: vat,
           note: profileDeleted ? '' : ((profile?['note'] as String?) ?? '').trim(),
+          categoryId: profileDeleted || categoryId == null || categoryId.isEmpty
+              ? null
+              : categoryId,
           invoices: shopInvoices,
         ),
       );
@@ -538,7 +648,8 @@ class DatabaseService {
 
   /// Writes the user's custom name/note for the shop identified by
   /// [shopId]; the profile is keyed by the shop's business identity so it
-  /// follows the same shop on other devices.
+  /// follows the same shop on other devices. Any category previously set
+  /// on the profile is preserved.
   Future<void> updateShopProfile({
     required int shopId,
     String? displayName,
@@ -553,11 +664,15 @@ class DatabaseService {
     if (rows.isEmpty) return;
     final vat = ((rows.first['vat_number'] as String?) ?? '').trim();
     final nameAr = ((rows.first['name_ar'] as String?) ?? '').trim();
+    final key = ShopProfile.keyFor(vatNumber: vat, nameAr: nameAr);
+    final existing = await _shopProfile(key);
     final profile = ShopProfile(
-      key: ShopProfile.keyFor(vatNumber: vat, nameAr: nameAr),
+      key: key,
       nameAr: nameAr,
+      nameEn: existing?.nameEn ?? '',
       displayName: (displayName ?? '').trim(),
       note: (note ?? '').trim(),
+      categoryId: existing?.categoryId,
       updatedAt: DateTime.now().millisecondsSinceEpoch,
       isSynced: false,
     );
@@ -565,6 +680,205 @@ class DatabaseService {
       'shop_profiles',
       profile.toMap(),
       conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// Sets (or clears, with a null [categoryId]) the category of the shop
+  /// identified by its business identity — the same key used for synced
+  /// profiles — while preserving every other profile field.
+  Future<void> setShopCategory({
+    required String vatNumber,
+    required String nameAr,
+    String? categoryId,
+  }) async {
+    final vat = vatNumber.trim();
+    final name = nameAr.trim();
+    if (vat.isEmpty && name.isEmpty) return;
+    final key = ShopProfile.keyFor(vatNumber: vat, nameAr: name);
+    final existing = await _shopProfile(key);
+    final profile = (existing ?? ShopProfile(key: key, nameAr: name)).copyWith(
+      categoryId: categoryId,
+      clearCategoryId: categoryId == null,
+      updatedAt: DateTime.now().millisecondsSinceEpoch,
+      isSynced: false,
+    );
+    await _db.insert(
+      'shop_profiles',
+      profile.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<ShopProfile?> _shopProfile(String key) async {
+    final rows = await _db.query(
+      'shop_profiles',
+      where: 'key = ?',
+      whereArgs: [key],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : ShopProfile.fromMap(rows.first);
+  }
+
+  /// The shop profile for a business identity (VAT number preferred),
+  /// or null when the shop has no profile yet.
+  Future<ShopProfile?> getShopProfile({
+    required String vatNumber,
+    required String nameAr,
+  }) {
+    final key = ShopProfile.keyFor(vatNumber: vatNumber, nameAr: nameAr);
+    return _shopProfile(key);
+  }
+
+  // ---- shop categories, payment methods and cards -------------------------
+
+  /// Live shop categories in display order: seeds first, then the
+  /// user-added ones by creation time.
+  Future<List<ShopCategory>> getShopCategories() async {
+    final rows = await _db.query(
+      'shop_categories',
+      where: 'is_deleted = 0',
+      orderBy: 'sort_order ASC, created_at ASC, id ASC',
+    );
+    return rows.map(ShopCategory.fromMap).toList();
+  }
+
+  /// Inserts or updates a category, stamping it as locally modified so
+  /// the next sync ships it. New rows sort after the seeds.
+  Future<void> upsertShopCategory(ShopCategory category) async {
+    final existingRows = await _db.query(
+      'shop_categories',
+      where: 'id = ?',
+      whereArgs: [category.id],
+      limit: 1,
+    );
+    var sortOrder = category.sortOrder;
+    if (existingRows.isEmpty) {
+      final maxRow = await _db.rawQuery(
+        'SELECT COALESCE(MAX(sort_order), 0) AS max_order FROM shop_categories',
+      );
+      sortOrder = ((maxRow.first['max_order'] as num?) ?? 0).toInt() + 10;
+    }
+    final effective = category.copyWith(
+      sortOrder: sortOrder,
+      updatedAt: DateTime.now().millisecondsSinceEpoch,
+      isSynced: false,
+    );
+    await _db.insert(
+      'shop_categories',
+      effective.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// Tombstone-deletes a category so the removal propagates to peers, and
+  /// clears it from local shop profiles (which then sync too).
+  Future<void> deleteShopCategory(String id) async {
+    await _db.transaction((transaction) async {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      await transaction.update(
+        'shop_categories',
+        {'is_deleted': 1, 'is_synced': 0, 'updated_at': now},
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+      await transaction.update(
+        'shop_profiles',
+        {'category_id': null, 'is_synced': 0, 'updated_at': now},
+        where: 'category_id = ? AND is_deleted = 0',
+        whereArgs: [id],
+      );
+    });
+  }
+
+  /// Live payment methods in display order.
+  Future<List<PaymentMethod>> getPaymentMethods() async {
+    final rows = await _db.query(
+      'payment_methods',
+      where: 'is_deleted = 0',
+      orderBy: 'sort_order ASC, created_at ASC, id ASC',
+    );
+    return rows.map(PaymentMethod.fromMap).toList();
+  }
+
+  /// Inserts or updates a payment method, stamping it as locally modified.
+  Future<void> upsertPaymentMethod(PaymentMethod method) async {
+    final existingRows = await _db.query(
+      'payment_methods',
+      where: 'id = ?',
+      whereArgs: [method.id],
+      limit: 1,
+    );
+    var sortOrder = method.sortOrder;
+    if (existingRows.isEmpty) {
+      final maxRow = await _db.rawQuery(
+        'SELECT COALESCE(MAX(sort_order), 0) AS max_order FROM payment_methods',
+      );
+      sortOrder = ((maxRow.first['max_order'] as num?) ?? 0).toInt() + 10;
+    }
+    final effective = method.copyWith(
+      sortOrder: sortOrder,
+      updatedAt: DateTime.now().millisecondsSinceEpoch,
+      isSynced: false,
+    );
+    await _db.insert(
+      'payment_methods',
+      effective.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// Tombstone-deletes a payment method so the removal propagates to
+  /// peers. Invoices keep their payment_method_id; the UI falls back to
+  /// showing just the card's last-4 digits when a method is gone.
+  Future<void> deletePaymentMethod(String id) async {
+    await _db.update(
+      'payment_methods',
+      {
+        'is_deleted': 1,
+        'is_synced': 0,
+        'updated_at': DateTime.now().millisecondsSinceEpoch,
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  /// Saved cards in creation order.
+  Future<List<PaymentCard>> getPaymentCards() async {
+    final rows = await _db.query(
+      'payment_cards',
+      where: 'is_deleted = 0',
+      orderBy: 'created_at ASC, id ASC',
+    );
+    return rows.map(PaymentCard.fromMap).toList();
+  }
+
+  /// Inserts or updates a saved card. Only name/description/last-4 are
+  /// ever stored — full card numbers have no field anywhere.
+  Future<void> upsertPaymentCard(PaymentCard card) async {
+    final effective = card.copyWith(
+      updatedAt: DateTime.now().millisecondsSinceEpoch,
+      isSynced: false,
+    );
+    await _db.insert(
+      'payment_cards',
+      effective.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// Tombstone-deletes a saved card. Invoices keep the last-4 snapshot
+  /// they recorded at payment time.
+  Future<void> deletePaymentCard(String id) async {
+    await _db.update(
+      'payment_cards',
+      {
+        'is_deleted': 1,
+        'is_synced': 0,
+        'updated_at': DateTime.now().millisecondsSinceEpoch,
+      },
+      where: 'id = ?',
+      whereArgs: [id],
     );
   }
 
@@ -669,11 +983,17 @@ class DatabaseService {
     final profiles = await _db.query('shop_profiles');
     final media = await _db.query('media');
     final settings = await _db.query('settings');
+    final categories = await _db.query('shop_categories');
+    final methods = await _db.query('payment_methods');
+    final cards = await _db.query('payment_cards');
     return jsonEncode({
       'schemaVersion': _schemaVersion,
       'createdAt': DateTime.now().toIso8601String(),
       'invoices': invoices.map((invoice) => invoice.toMap()).toList(),
       'shopProfiles': profiles,
+      'shopCategories': categories,
+      'paymentMethods': methods,
+      'paymentCards': cards,
       'media': media,
       'settings': settings,
     });
@@ -752,6 +1072,20 @@ class DatabaseService {
           .whereType<Map>())
         ..._legacyShopRowToProfiles(Map<String, Object?>.from(row)),
     ];
+    // v8 catalogs: absent in legacy backups, which then leave the local
+    // catalog untouched instead of wiping user data.
+    final categoryMaps = (decoded['shopCategories'] as List? ?? const [])
+        .whereType<Map>()
+        .map((row) => ShopCategory.fromMap(Map<String, Object?>.from(row)))
+        .toList();
+    final methodMaps = (decoded['paymentMethods'] as List? ?? const [])
+        .whereType<Map>()
+        .map((row) => PaymentMethod.fromMap(Map<String, Object?>.from(row)))
+        .toList();
+    final cardMaps = (decoded['paymentCards'] as List? ?? const [])
+        .whereType<Map>()
+        .map((row) => PaymentCard.fromMap(Map<String, Object?>.from(row)))
+        .toList();
 
     final mediaDir = _mediaDirectoryPath;
     final mediaRows = <MediaRecord>[];
@@ -775,6 +1109,15 @@ class DatabaseService {
       await transaction.delete('invoices');
       await transaction.delete('shop_profiles');
       await transaction.delete('media');
+      if (decoded['shopCategories'] != null) {
+        await transaction.delete('shop_categories');
+      }
+      if (decoded['paymentMethods'] != null) {
+        await transaction.delete('payment_methods');
+      }
+      if (decoded['paymentCards'] != null) {
+        await transaction.delete('payment_cards');
+      }
       for (final invoice in invoiceMaps) {
         final row = _normalizedInvoiceRow(invoice, preserveIdentity: true);
         // Point image_path at the restored local copy when we have it.
@@ -791,6 +1134,18 @@ class DatabaseService {
       }
       for (final profile in profileMaps) {
         await transaction.insert('shop_profiles', profile.toMap(),
+            conflictAlgorithm: ConflictAlgorithm.replace);
+      }
+      for (final category in categoryMaps) {
+        await transaction.insert('shop_categories', category.toMap(),
+            conflictAlgorithm: ConflictAlgorithm.replace);
+      }
+      for (final method in methodMaps) {
+        await transaction.insert('payment_methods', method.toMap(),
+            conflictAlgorithm: ConflictAlgorithm.replace);
+      }
+      for (final card in cardMaps) {
+        await transaction.insert('payment_cards', card.toMap(),
             conflictAlgorithm: ConflictAlgorithm.replace);
       }
       for (final media in mediaRows) {

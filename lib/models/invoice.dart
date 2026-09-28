@@ -24,6 +24,9 @@ class Invoice {
     this.invoiceNumber = '',
     this.note = '',
     this.imagePath,
+    this.paymentMethodId,
+    this.cardId,
+    this.cardLast4,
     this.createdAt,
   });
 
@@ -53,6 +56,14 @@ class Invoice {
   final String invoiceNumber;
   final String note;
   final String? imagePath;
+
+  /// Payment classification: which method paid, and for card payments
+  /// which saved card — plus the last-4 snapshot taken at save time, so
+  /// the receipt stays correct even if the card is later edited or
+  /// deleted. Only ever the LAST FOUR digits; no full card numbers.
+  final String? paymentMethodId;
+  final String? cardId;
+  final String? cardLast4;
   final DateTime? createdAt;
 
   Invoice copyWith({
@@ -73,6 +84,11 @@ class Invoice {
     String? note,
     String? imagePath,
     bool clearImage = false,
+    String? paymentMethodId,
+    bool clearPaymentMethod = false,
+    String? cardId,
+    bool clearCard = false,
+    String? cardLast4,
   }) => Invoice(
         id: id ?? this.id,
         deviceId: deviceId ?? this.deviceId,
@@ -91,6 +107,11 @@ class Invoice {
         invoiceNumber: invoiceNumber ?? this.invoiceNumber,
         note: note ?? this.note,
         imagePath: clearImage ? null : (imagePath ?? this.imagePath),
+        paymentMethodId: clearPaymentMethod
+            ? null
+            : (paymentMethodId ?? this.paymentMethodId),
+        cardId: clearCard ? null : (cardId ?? this.cardId),
+        cardLast4: clearCard ? null : (cardLast4 ?? this.cardLast4),
         createdAt: createdAt,
       );
 
@@ -109,6 +130,9 @@ class Invoice {
         'note': note,
         'image_path': imagePath,
         'image_sha256': imageSha256,
+        'payment_method_id': paymentMethodId,
+        'card_id': cardId,
+        'card_last4': cardLast4,
         'updated_at': updatedAt ?? DateTime.now().millisecondsSinceEpoch,
         'is_synced': isSynced ? 1 : 0,
         'is_deleted': isDeleted ? 1 : 0,
@@ -142,6 +166,9 @@ class Invoice {
       invoiceNumber: (map['invoice_number'] as String?) ?? '',
       note: (map['note'] as String?) ?? '',
       imagePath: map['image_path'] as String?,
+      paymentMethodId: map['payment_method_id'] as String?,
+      cardId: map['card_id'] as String?,
+      cardLast4: map['card_last4'] as String?,
       createdAt: DateTime.tryParse(map['created_at'] as String? ?? ''),
     );
   }

@@ -5,21 +5,31 @@ import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../data/database_service.dart';
 import '../l10n.dart';
 import '../models/invoice.dart';
+import '../models/payment_method.dart';
+import '../models/shop_category.dart';
 import '../services/zatca_qr_parser.dart';
 import '../screens/scanner_screen.dart';
+import 'catalog_pickers.dart';
 import 'ocr_text_sheet.dart';
+import 'picker_icons.dart';
 import 'sar_symbol.dart';
 
 Future<Invoice?> showInvoiceEditor(
   BuildContext context,
   Invoice invoice, {
   bool review = false,
+  required DatabaseService database,
 }) {
   return showDialog<Invoice>(
     context: context,
-    builder: (_) => _InvoiceEditorDialog(invoice: invoice, review: review),
+    builder: (_) => _InvoiceEditorDialog(
+      invoice: invoice,
+      review: review,
+      database: database,
+    ),
   );
 }
 
@@ -41,10 +51,15 @@ Future<void> deleteReplacedInvoiceImage(
 }
 
 class _InvoiceEditorDialog extends StatefulWidget {
-  const _InvoiceEditorDialog({required this.invoice, required this.review});
+  const _InvoiceEditorDialog({
+    required this.invoice,
+    required this.review,
+    required this.database,
+  });
 
   final Invoice invoice;
   final bool review;
+  final DatabaseService database;
 
   @override
   State<_InvoiceEditorDialog> createState() => _InvoiceEditorDialogState();
@@ -59,6 +74,14 @@ class _InvoiceEditorDialogState extends State<_InvoiceEditorDialog> {
   late final TextEditingController _invoiceNumberController;
   late final TextEditingController _noteController;
   String? _imagePath;
+
+  List<ShopCategory> _categories = const [];
+  List<PaymentMethod> _methods = const [];
+  List<PaymentCard> _cards = const [];
+  String? _categoryId;
+  late String? _initialCategoryId;
+  String? _methodId;
+  String? _cardId;
 
   @override
   void initState() {
@@ -76,6 +99,62 @@ class _InvoiceEditorDialogState extends State<_InvoiceEditorDialog> {
     _invoiceNumberController = TextEditingController(text: invoice.invoiceNumber);
     _noteController = TextEditingController(text: invoice.note);
     _imagePath = invoice.imagePath;
+    // Payment belongs to the invoice; the category belongs to the SHOP
+    // and is preselected from its profile once catalogs load.
+    _categoryId = null;
+    _initialCategoryId = null;
+    _methodId = invoice.paymentMethodId;
+    _cardId = invoice.cardId;
+    _loadCatalogs();
+  }
+
+  Future<void> _loadCatalogs() async {
+    final categories = await widget.database.getShopCategories();
+    final methods = await widget.database.getPaymentMethods();
+    final cards = await widget.database.getPaymentCards();
+    final profile = await widget.database.getShopProfile(
+      vatNumber: widget.invoice.vatNumber,
+      nameAr: widget.invoice.sellerName,
+    );
+    if (!mounted) return;
+    setState(() {
+      _categories = categories;
+      _methods = methods;
+      _cards = cards;
+      _initialCategoryId = profile?.categoryId;
+      _categoryId ??= _initialCategoryId;
+    });
+  }
+
+  ShopCategory? get _selectedCategory {
+    for (final category in _categories) {
+      if (category.id == _categoryId) return category;
+    }
+    return null;
+  }
+
+  PaymentMethod? get _selectedMethod {
+    for (final method in _methods) {
+      if (method.id == _methodId) return method;
+    }
+    return null;
+  }
+
+  PaymentCard? get _selectedCard {
+    for (final card in _cards) {
+      if (card.id == _cardId) return card;
+    }
+    return null;
+  }
+
+  bool get _needsCard => _selectedMethod?.requiresCard ?? false;
+
+  String _cardText() {
+    final card = _selectedCard;
+    if (card == null) return tr(context, 'none');
+    return card.description.isEmpty
+        ? '${card.name} •••• ${card.last4}'
+        : '${card.name} (${card.description}) •••• ${card.last4}';
   }
 
   @override
@@ -209,7 +288,7 @@ class _InvoiceEditorDialogState extends State<_InvoiceEditorDialog> {
     );
   }
 
-  void _save() {
+  Future<void> _save() async {
     final seller = _sellerController.text.trim();
     final amount = double.tryParse(
       _amountController.text.trim().replaceAll(',', ''),
@@ -227,20 +306,85 @@ class _InvoiceEditorDialogState extends State<_InvoiceEditorDialog> {
       );
       return;
     }
+    final vat = _vatController.text.trim();
+    // The category is a shop attribute: persist it on the shop profile
+    // whenever it was touched, keyed by the shop's business identity.
+    if (_categoryId != _initialCategoryId &&
+        (vat.isNotEmpty || seller.isNotEmpty)) {
+      await widget.database.setShopCategory(
+        vatNumber: vat,
+        nameAr: seller,
+        categoryId: _categoryId,
+      );
+    }
+    if (!mounted) return;
+    final method = _selectedMethod;
+    final card = _selectedCard;
+    final wantsCard = method != null && method.requiresCard;
     Navigator.pop(
       context,
       widget.invoice.copyWith(
         sellerName: seller,
         sellerNameEn: _sellerEnController.text.trim(),
-        vatNumber: _vatController.text.trim(),
+        vatNumber: vat,
         invoiceNumber: _invoiceNumberController.text.trim(),
         totalAmount: amount,
         vatAmount: tax,
         note: _noteController.text.trim(),
         imagePath: _imagePath,
         clearImage: _imagePath == null,
+        paymentMethodId: method?.id,
+        clearPaymentMethod: method == null,
+        cardId: wantsCard ? card?.id : null,
+        cardLast4: wantsCard ? card?.last4 : null,
+        // Clearing the card also clears the last-4 snapshot together.
+        clearCard: !wantsCard || card == null,
       ),
     );
+  }
+
+  Future<void> _pickCategory() async {
+    final result = await showCategoryPickerSheet(
+      context,
+      database: widget.database,
+      selectedCategoryId: _categoryId,
+    );
+    if (result == null || !mounted) return;
+    await _loadCatalogs();
+    if (!mounted) return;
+    setState(() {
+      _categoryId = result.cleared ? null : result.categoryId;
+    });
+  }
+
+  Future<void> _pickPaymentMethod() async {
+    final result = await showPaymentMethodPickerSheet(
+      context,
+      database: widget.database,
+      selectedMethodId: _methodId,
+    );
+    if (result == null || !mounted) return;
+    await _loadCatalogs();
+    if (!mounted) return;
+    setState(() {
+      _methodId = result.isEmpty ? null : result;
+      // Switching to a method that needs no card drops the card choice.
+      if (!_needsCard) _cardId = null;
+    });
+  }
+
+  Future<void> _pickCard() async {
+    final result = await showCardPickerSheet(
+      context,
+      database: widget.database,
+      selectedCardId: _cardId,
+    );
+    if (result == null || !mounted) return;
+    await _loadCatalogs();
+    if (!mounted) return;
+    setState(() {
+      _cardId = result.cleared ? null : result.card?.id;
+    });
   }
 
   Future<void> _scanInvoiceNumber() async {
@@ -353,6 +497,38 @@ class _InvoiceEditorDialogState extends State<_InvoiceEditorDialog> {
                 alignLabelWithHint: true,
               ),
             ),
+            const SizedBox(height: 10),
+            _PickerRow(
+              label: tr(context, 'shopCategory'),
+              value: _selectedCategory?.displayName(
+                    english: AppL10n.isEnglish(context),
+                  ) ??
+                  tr(context, 'uncategorized'),
+              icon: catalogIcon(_selectedCategory?.icon),
+              onTap: _pickCategory,
+            ),
+            const SizedBox(height: 10),
+            _PickerRow(
+              label: tr(context, 'paymentMethod'),
+              value: _selectedMethod?.displayName(
+                    english: AppL10n.isEnglish(context),
+                  ) ??
+                  tr(context, 'none'),
+              icon: catalogIcon(
+                _selectedMethod?.icon,
+                fallback: Icons.payments_outlined,
+              ),
+              onTap: _pickPaymentMethod,
+            ),
+            if (_needsCard) ...[
+              const SizedBox(height: 10),
+              _PickerRow(
+                label: tr(context, 'paymentCard'),
+                value: _cardText(),
+                icon: Icons.credit_card_outlined,
+                onTap: _pickCard,
+              ),
+            ],
             const SizedBox(height: 14),
             // Invoice Image section
             Text(
@@ -540,6 +716,38 @@ class _InvoiceEditorDialogState extends State<_InvoiceEditorDialog> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// A read-only field that opens a picker sheet, styled like the editor's
+/// text inputs.
+class _PickerRow extends StatelessWidget {
+  const _PickerRow({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.onTap,
+  });
+
+  final String label;
+  final String value;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: onTap,
+      child: InputDecorator(
+        decoration: InputDecoration(
+          labelText: label,
+          prefixIcon: Icon(icon),
+          suffixIcon: const Icon(Icons.keyboard_arrow_down_rounded),
+        ),
+        child: Text(value, style: const TextStyle(fontSize: 16)),
+      ),
     );
   }
 }

@@ -522,8 +522,8 @@ class _SyncScreenState extends State<SyncScreen> {
                           const Spacer(),
                           if (_live != null)
                             Text(
-                              '${_live!.receivedInvoices + _live!.receivedProfiles} / '
-                              '${_live!.sentInvoices + _live!.sentProfiles}',
+                              '${_live!.receivedInvoices + _live!.receivedProfiles + _live!.receivedExtras} / '
+                              '${_live!.sentInvoices + _live!.sentProfiles + _live!.sentExtras}',
                               style: theme.textTheme.bodyMedium?.copyWith(
                                 fontWeight: FontWeight.w700,
                               ),

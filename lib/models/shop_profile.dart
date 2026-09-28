@@ -9,6 +9,7 @@ class ShopProfile {
     this.nameEn = '',
     this.displayName = '',
     this.note = '',
+    this.categoryId,
     this.updatedAt,
     this.isSynced = false,
     this.isDeleted = false,
@@ -19,6 +20,10 @@ class ShopProfile {
   final String nameEn;
   final String displayName;
   final String note;
+
+  /// The shop's category (supermarket, barber...) referencing
+  /// shop_categories.id; null when uncategorized.
+  final String? categoryId;
   final int? updatedAt;
   final bool isSynced;
   final bool isDeleted;
@@ -35,6 +40,8 @@ class ShopProfile {
     String? nameEn,
     String? displayName,
     String? note,
+    String? categoryId,
+    bool clearCategoryId = false,
     int? updatedAt,
     bool? isSynced,
     bool? isDeleted,
@@ -44,6 +51,9 @@ class ShopProfile {
         nameEn: nameEn ?? this.nameEn,
         displayName: displayName ?? this.displayName,
         note: note ?? this.note,
+        categoryId: clearCategoryId
+            ? null
+            : (categoryId ?? this.categoryId),
         updatedAt: updatedAt ?? this.updatedAt,
         isSynced: isSynced ?? this.isSynced,
         isDeleted: isDeleted ?? this.isDeleted,
@@ -55,6 +65,7 @@ class ShopProfile {
         'name_en': nameEn,
         'display_name': displayName,
         'note': note,
+        'category_id': categoryId,
         'updated_at': updatedAt ?? DateTime.now().millisecondsSinceEpoch,
         'is_synced': isSynced ? 1 : 0,
         'is_deleted': isDeleted ? 1 : 0,
@@ -66,6 +77,7 @@ class ShopProfile {
         nameEn: (map['name_en'] as String?) ?? '',
         displayName: (map['display_name'] as String?) ?? '',
         note: (map['note'] as String?) ?? '',
+        categoryId: map['category_id'] as String?,
         updatedAt: map['updated_at'] is int ? map['updated_at'] as int : null,
         isSynced: ((map['is_synced'] as num?) ?? 0) != 0,
         isDeleted: ((map['is_deleted'] as num?) ?? 0) != 0,

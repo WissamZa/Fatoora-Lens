@@ -4,7 +4,9 @@ import 'package:package_info_plus/package_info_plus.dart';
 import '../config/app_info.dart';
 import '../data/database_service.dart';
 import '../l10n.dart';
+import 'categories_manager_screen.dart';
 import 'connection_test_screen.dart';
+import 'payments_manager_screen.dart';
 import 'sync_screen.dart';
 
 class SettingsTab extends StatelessWidget {
@@ -65,6 +67,28 @@ class SettingsTab extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 14),
+        _ActionCard(
+          icon: Icons.category_outlined,
+          title: tr(context, 'categories'),
+          subtitle: tr(context, 'categoriesSubtitle'),
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => CategoriesManagerScreen(database: database),
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        _ActionCard(
+          icon: Icons.credit_card_outlined,
+          title: tr(context, 'paymentMethods'),
+          subtitle: tr(context, 'paymentMethodsSubtitle'),
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => PaymentsManagerScreen(database: database),
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
         _ActionCard(icon: Icons.file_download_outlined, title: tr(context, 'exportCsv'), onTap: onExportCsv),
         const SizedBox(height: 10),
         _ActionCard(icon: Icons.backup_outlined, title: tr(context, 'backup'), onTap: onBackup),
@@ -229,10 +253,16 @@ class _AboutRow extends StatelessWidget {
 }
 
 class _ActionCard extends StatelessWidget {
-  const _ActionCard({required this.icon, required this.title, required this.onTap});
+  const _ActionCard({
+    required this.icon,
+    required this.title,
+    required this.onTap,
+    this.subtitle,
+  });
 
   final IconData icon;
   final String title;
+  final String? subtitle;
   final VoidCallback onTap;
 
   @override
@@ -241,6 +271,14 @@ class _ActionCard extends StatelessWidget {
           onTap: onTap,
           leading: Icon(icon, color: Theme.of(context).colorScheme.primary),
           title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+          subtitle: subtitle == null
+              ? null
+              : Text(
+                  subtitle!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
           trailing: const Icon(Icons.chevron_right_rounded),
         ),
       );

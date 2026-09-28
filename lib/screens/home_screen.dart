@@ -9,6 +9,7 @@ import '../data/database_service.dart';
 import '../l10n.dart';
 import '../models/invoice.dart';
 import '../models/shop.dart';
+import '../models/shop_category.dart';
 import '../services/export_service.dart';
 import '../services/zatca_qr_parser.dart';
 import '../widgets/invoice_editor.dart';
@@ -44,6 +45,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final TextEditingController _searchController = TextEditingController();
   List<Invoice> _invoices = const [];
   List<Shop> _shops = const [];
+  List<ShopCategory> _shopCategories = const [];
   int _tabIndex = 0;
   bool _loading = true;
   bool _busy = false;
@@ -67,10 +69,12 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       final invoices = await widget.database.getInvoices();
       final shops = await widget.database.getShops();
+      final shopCategories = await widget.database.getShopCategories();
       if (!mounted) return;
       setState(() {
         _invoices = invoices;
         _shops = shops;
+        _shopCategories = shopCategories;
         _loadError = null;
         _loading = false;
       });
@@ -132,7 +136,12 @@ class _HomeScreenState extends State<HomeScreen> {
     final english = AppL10n.isEnglish(context);
     try {
       final parsed = ZatcaQrParser.parse(payload);
-      final invoice = await showInvoiceEditor(context, parsed, review: true);
+      final invoice = await showInvoiceEditor(
+        context,
+        parsed,
+        review: true,
+        database: widget.database,
+      );
       if (invoice == null) return;
       await widget.database.insertInvoice(invoice);
       await _loadData();
@@ -146,7 +155,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _editInvoice(Invoice invoice) async {
     final savedText = tr(context, 'saved');
-    final updated = await showInvoiceEditor(context, invoice);
+    final updated = await showInvoiceEditor(
+      context,
+      invoice,
+      database: widget.database,
+    );
     if (updated == null) return;
     await widget.database.updateInvoice(updated);
     await deleteReplacedInvoiceImage(invoice, updated);
@@ -182,11 +195,15 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _exportCsv() async {
     if (_invoices.isEmpty) return _message(tr(context, 'noInvoices'));
     final english = AppL10n.isEnglish(context);
+    final methods = await widget.database.getPaymentMethods();
+    final cards = await widget.database.getPaymentCards();
     await _runBusy(
       () => ExportService.shareCsv(
         _invoices,
         english: english,
         shops: _shops,
+        methods: methods,
+        cards: cards,
       ),
     );
   }
@@ -358,7 +375,12 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final pages = [
       _buildHomeTab(),
-      ShopsTab(database: widget.database, shops: _shops, onChanged: _loadData),
+      ShopsTab(
+        database: widget.database,
+        shops: _shops,
+        categories: _shopCategories,
+        onChanged: _loadData,
+      ),
       AnalysisTab(shops: _shops),
       SettingsTab(
         database: widget.database,

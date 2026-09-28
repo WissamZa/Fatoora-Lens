@@ -10,6 +10,7 @@ class SyncPeer {
     this.lastPort,
     this.lastRole,
     this.lastSyncedAt,
+    this.syncProto = 0,
   });
 
   final String deviceId;
@@ -33,6 +34,13 @@ class SyncPeer {
 
   final int? lastSyncedAt;
 
+  /// The sync protocol version the peer advertised in its last session
+  /// handshake. 0 = unknown (never seen); 1 = legacy app version that
+  /// cannot receive the new tables/columns; 2+ = current. When the
+  /// advertised value differs from the stored one the per-peer cursors
+  /// are reset once so everything re-sends (idempotent LWW merge).
+  final int syncProto;
+
   String get displayName =>
       name.isNotEmpty ? name : 'جهاز ${deviceId.substring(0, 4)}';
 
@@ -44,6 +52,7 @@ class SyncPeer {
     int? lastPort,
     String? lastRole,
     int? lastSyncedAt,
+    int? syncProto,
   }) => SyncPeer(
         deviceId: deviceId,
         name: name ?? this.name,
@@ -53,6 +62,7 @@ class SyncPeer {
         lastPort: lastPort ?? this.lastPort,
         lastRole: lastRole ?? this.lastRole,
         lastSyncedAt: lastSyncedAt ?? this.lastSyncedAt,
+        syncProto: syncProto ?? this.syncProto,
       );
 
   Map<String, Object?> toMap() => {
@@ -64,6 +74,7 @@ class SyncPeer {
         'last_port': lastPort,
         'last_role': lastRole,
         'last_synced_at': lastSyncedAt ?? DateTime.now().millisecondsSinceEpoch,
+        'sync_proto': syncProto,
       };
 
   factory SyncPeer.fromMap(Map<String, Object?> map) => SyncPeer(
@@ -76,5 +87,6 @@ class SyncPeer {
         lastRole: map['last_role'] as String?,
         lastSyncedAt:
             map['last_synced_at'] is int ? map['last_synced_at'] as int : null,
+        syncProto: (map['sync_proto'] as num?)?.toInt() ?? 0,
       );
 }
