@@ -74,6 +74,7 @@ class _InvoiceEditorDialogState extends State<_InvoiceEditorDialog> {
   late final TextEditingController _invoiceNumberController;
   late final TextEditingController _noteController;
   String? _imagePath;
+  late DateTime _issuedAt;
 
   List<ShopCategory> _categories = const [];
   List<PaymentMethod> _methods = const [];
@@ -99,6 +100,7 @@ class _InvoiceEditorDialogState extends State<_InvoiceEditorDialog> {
     _invoiceNumberController = TextEditingController(text: invoice.invoiceNumber);
     _noteController = TextEditingController(text: invoice.note);
     _imagePath = invoice.imagePath;
+    _issuedAt = invoice.issuedAt;
     // Payment belongs to the invoice; the category belongs to the SHOP
     // and is preselected from its profile once catalogs load.
     _categoryId = null;
@@ -288,19 +290,48 @@ class _InvoiceEditorDialogState extends State<_InvoiceEditorDialog> {
     );
   }
 
+  Future<void> _pickIssuedAt() async {
+    final pickedDate = await showDatePicker(
+      context: context,
+      initialDate: _issuedAt,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
+    if (pickedDate == null || !mounted) return;
+    final pickedTime = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(_issuedAt),
+    );
+    if (!mounted) return;
+    final time = pickedTime ?? TimeOfDay.fromDateTime(_issuedAt);
+    setState(() {
+      _issuedAt = DateTime(
+        pickedDate.year,
+        pickedDate.month,
+        pickedDate.day,
+        time.hour,
+        time.minute,
+      );
+    });
+  }
+
   Future<void> _save() async {
     final seller = _sellerController.text.trim();
     final amount = double.tryParse(
       _amountController.text.trim().replaceAll(',', ''),
     );
     final tax = double.tryParse(_taxController.text.trim().replaceAll(',', ''));
-    if (seller.isEmpty || amount == null || tax == null) {
+    if (seller.isEmpty ||
+        amount == null ||
+        tax == null ||
+        amount <= 0 ||
+        tax < 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             AppL10n.isEnglish(context)
-                ? 'Check the required fields.'
-                : 'تحقق من الحقول المطلوبة.',
+                ? 'Check the required fields: the amount must be greater than zero.'
+                : 'تحقق من الحقول المطلوبة: يجب أن يكون المبلغ أكبر من صفر.',
           ),
         ),
       );
@@ -327,6 +358,7 @@ class _InvoiceEditorDialogState extends State<_InvoiceEditorDialog> {
         sellerName: seller,
         sellerNameEn: _sellerEnController.text.trim(),
         vatNumber: vat,
+        issuedAt: _issuedAt,
         invoiceNumber: _invoiceNumberController.text.trim(),
         totalAmount: amount,
         vatAmount: tax,
@@ -694,11 +726,31 @@ class _InvoiceEditorDialogState extends State<_InvoiceEditorDialog> {
               ),
             ],
             const SizedBox(height: 14),
-            Align(
-              alignment: AlignmentDirectional.centerStart,
-              child: Text(
-                '${tr(context, 'date')}: ${ZatcaQrParser.formatDate(widget.invoice.issuedAt)}  •  ${ZatcaQrParser.formatTime(widget.invoice.issuedAt)}',
-                style: theme.textTheme.bodySmall,
+            InkWell(
+              borderRadius: BorderRadius.circular(14),
+              onTap: _pickIssuedAt,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.event_outlined,
+                      size: 18,
+                      color: theme.colorScheme.primary,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '${tr(context, 'date')}: ${ZatcaQrParser.formatDate(_issuedAt)}  •  ${ZatcaQrParser.formatTime(_issuedAt)}',
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                    const Spacer(),
+                    Icon(
+                      Icons.edit_outlined,
+                      size: 15,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ],
+                ),
               ),
             ),
           ],

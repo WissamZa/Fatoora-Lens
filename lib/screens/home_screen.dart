@@ -153,6 +153,31 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  /// Manual entry for receipts whose QR barcode can't be scanned: a
+  /// blank draft (with a unique synthetic payload so sync dedupe stays
+  /// safe) opened in the regular review editor.
+  Future<void> _addManualInvoice() async {
+    final savedText = tr(context, 'saved');
+    final draft = Invoice(
+      sellerName: '',
+      vatNumber: '',
+      issuedAt: DateTime.now(),
+      totalAmount: 0,
+      vatAmount: 0,
+      rawPayload: 'manual:${Invoice.newId()}',
+    );
+    final invoice = await showInvoiceEditor(
+      context,
+      draft,
+      review: true,
+      database: widget.database,
+    );
+    if (invoice == null) return;
+    await widget.database.insertInvoice(invoice);
+    await _loadData();
+    _message('$savedText: ${invoice.sellerName}');
+  }
+
   Future<void> _editInvoice(Invoice invoice) async {
     final savedText = tr(context, 'saved');
     final updated = await showInvoiceEditor(
@@ -381,7 +406,7 @@ class _HomeScreenState extends State<HomeScreen> {
         categories: _shopCategories,
         onChanged: _loadData,
       ),
-      AnalysisTab(shops: _shops),
+      AnalysisTab(shops: _shops, database: widget.database),
       SettingsTab(
         database: widget.database,
         darkMode: widget.darkMode,
@@ -524,6 +549,15 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            onPressed: _busy ? null : _addManualInvoice,
+            icon: const Icon(Icons.edit_note_outlined),
+            label: Text(tr(context, 'manualEntry')),
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 13),
+            ),
           ),
           const SizedBox(height: 14),
           TextField(

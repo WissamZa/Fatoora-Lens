@@ -70,9 +70,17 @@ void main() {
     expect(find.byType(TextField), findsOneWidget);
     expect(find.text('الكاميرا'), findsOneWidget);
     expect(find.text('من صورة'), findsOneWidget);
+    expect(find.text('إدخال يدوي (بدون باركود)'), findsOneWidget);
     expect(find.text('إجمالي الفواتير'), findsOneWidget);
     expect(find.text('إجمالي المبالغ'), findsOneWidget);
     expect(find.text('إجمالي الضريبة'), findsOneWidget);
+    // The empty state sits below the fold; the lazy ListView only builds
+    // it once it is scrolled into view.
+    await tester.scrollUntilVisible(
+      find.text('لا توجد فواتير محفوظة بعد'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
     expect(find.text('لا توجد فواتير محفوظة بعد'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });

@@ -5,21 +5,37 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
+import '../data/database_service.dart';
 import '../l10n.dart';
 import '../models/shop.dart';
 import '../widgets/sar_symbol.dart';
+import 'period_report_screen.dart';
 
 enum ChartType { bar, line, pie }
 
+/// One (label, value) slice for the donut chart and its legend.
+typedef PieSlice = ({String label, double value});
+
 class AnalysisTab extends StatelessWidget {
-  const AnalysisTab({required this.shops, super.key});
+  const AnalysisTab({required this.shops, required this.database, super.key});
 
   final List<Shop> shops;
+  final DatabaseService database;
 
   @override
   Widget build(BuildContext context) {
     if (shops.isEmpty) {
-      return Center(child: Text(tr(context, 'noData')));
+      // The period reports stay reachable even before any data exists.
+      return ListView(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 100),
+        children: [
+          Text(tr(context, 'expensesAnalysis'), style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+          const SizedBox(height: 14),
+          _reportsEntry(context),
+          const SizedBox(height: 14),
+          Center(child: Text(tr(context, 'noData'))),
+        ],
+      );
     }
     final ordered = [...shops]..sort((a, b) => b.totalAmount.compareTo(a.totalAmount));
     final chartShops = ordered.take(8).toList();
@@ -28,23 +44,28 @@ class AnalysisTab extends StatelessWidget {
     final count = shops.fold<int>(0, (sum, shop) => sum + shop.invoices.length);
     final colors = chartColors(context);
     final monthlyEntries = monthlyTotals(shops);
+    final chartSlices = [
+      for (final shop in chartShops) (label: shop.name, value: shop.totalAmount),
+    ];
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 100),
       children: [
         Text(tr(context, 'expensesAnalysis'), style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
         const SizedBox(height: 14),
+        _reportsEntry(context),
+        const SizedBox(height: 14),
         Row(
           children: [
-            Expanded(child: _Metric(label: tr(context, 'allShopsTotal'), amount: total, icon: Icons.payments_outlined)),
+            Expanded(child: MetricCard(label: tr(context, 'allShopsTotal'), amount: total, icon: Icons.payments_outlined)),
             const SizedBox(width: 10),
-            Expanded(child: _Metric(label: tr(context, 'totalTax'), amount: tax, icon: Icons.receipt_long_outlined)),
+            Expanded(child: MetricCard(label: tr(context, 'totalTax'), amount: tax, icon: Icons.receipt_long_outlined)),
           ],
         ),
         const SizedBox(height: 10),
-        _Metric(label: tr(context, 'totalInvoices'), value: '$count', icon: Icons.grid_view_rounded),
+        MetricCard(label: tr(context, 'totalInvoices'), value: '$count', icon: Icons.grid_view_rounded),
         const SizedBox(height: 18),
-        _ChartCard(
+        ChartCard(
           title: tr(context, 'byShop'),
           onTap: () => _openChart(context, ChartType.bar),
           child: SizedBox(
@@ -53,7 +74,7 @@ class AnalysisTab extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 14),
-        _ChartCard(
+        ChartCard(
           title: tr(context, 'monthlyTrend'),
           onTap: () => _openChart(context, ChartType.line),
           child: SizedBox(
@@ -64,16 +85,16 @@ class AnalysisTab extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 14),
-        _ChartCard(
+        ChartCard(
           title: tr(context, 'shopShare'),
           onTap: () => _openChart(context, ChartType.pie),
           child: Row(
             children: [
-              ShopPieChart(shops: chartShops, total: total, colors: colors),
+              LabeledPieChart(slices: chartSlices, total: total, colors: colors),
               const SizedBox(width: 12),
               Expanded(
-                child: _PieLegend(
-                  shops: chartShops,
+                child: PieLegend(
+                  slices: chartSlices,
                   total: total,
                   colors: colors,
                 ),
@@ -90,7 +111,11 @@ class AnalysisTab extends StatelessWidget {
               children: [
                 Text(tr(context, 'summary'), style: const TextStyle(fontWeight: FontWeight.w800)),
                 const SizedBox(height: 16),
-                ...ordered.map((shop) => _ShopProgress(shop: shop, total: total)),
+                ...ordered.map((shop) => ShareProgress(
+                      label: shop.name,
+                      amount: shop.totalAmount,
+                      total: total,
+                    )),
               ],
             ),
           ),
@@ -98,6 +123,31 @@ class AnalysisTab extends StatelessWidget {
       ],
     );
   }
+
+  Widget _reportsEntry(BuildContext context) => Card(
+        child: ListTile(
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => PeriodReportScreen(database: database),
+            ),
+          ),
+          leading: Icon(
+            Icons.insights_outlined,
+            color: Theme.of(context).colorScheme.primary,
+          ),
+          title: Text(
+            tr(context, 'periodReports'),
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
+          subtitle: Text(
+            tr(context, 'periodReportsSubtitle'),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          trailing: const Icon(Icons.chevron_right_rounded),
+        ),
+      );
 
   void _openChart(BuildContext context, ChartType type) {
     Navigator.of(context).push<void>(
@@ -129,11 +179,14 @@ List<MapEntry<DateTime, double>> monthlyTotals(List<Shop> shops) {
   return monthly.entries.toList()..sort((a, b) => a.key.compareTo(b.key));
 }
 
-class _ChartCard extends StatelessWidget {
-  const _ChartCard({required this.title, required this.onTap, required this.child});
+class ChartCard extends StatelessWidget {
+  const ChartCard({required this.title, required this.onTap, required this.child, super.key});
 
   final String title;
-  final VoidCallback onTap;
+
+  /// Null renders the card without the expand affordance and without a
+  /// tap action (the period reports use non-expandable charts).
+  final VoidCallback? onTap;
   final Widget child;
 
   @override
@@ -151,14 +204,15 @@ class _ChartCard extends StatelessWidget {
                   Expanded(
                     child: Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
                   ),
-                  Tooltip(
-                    message: tr(context, 'tapToExpand'),
-                    child: Icon(
-                      Icons.open_in_full_rounded,
-                      size: 15,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  if (onTap != null)
+                    Tooltip(
+                      message: tr(context, 'tapToExpand'),
+                      child: Icon(
+                        Icons.open_in_full_rounded,
+                        size: 15,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
                     ),
-                  ),
                 ],
               ),
               const SizedBox(height: 18),
@@ -263,10 +317,13 @@ class _ChartFullscreenPageState extends State<ChartFullscreenPage> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final side = math.min(constraints.maxHeight, 320.0).clamp(200.0, 320.0);
+        final slices = [
+          for (final shop in ordered) (label: shop.name, value: shop.totalAmount),
+        ];
         return Row(
           children: [
-            ShopPieChart(
-              shops: ordered,
+            LabeledPieChart(
+              slices: slices,
               total: total,
               colors: colors,
               size: side,
@@ -274,8 +331,8 @@ class _ChartFullscreenPageState extends State<ChartFullscreenPage> {
             ),
             const SizedBox(width: 20),
             Expanded(
-              child: _PieLegend(
-                shops: ordered,
+              child: PieLegend(
+                slices: slices,
                 total: total,
                 colors: colors,
                 showAmounts: true,
@@ -358,10 +415,19 @@ class ShopBarChart extends StatelessWidget {
 }
 
 class MonthlyLineChart extends StatelessWidget {
-  const MonthlyLineChart({required this.entries, this.labelFontSize = 9, super.key});
+  const MonthlyLineChart({
+    required this.entries,
+    this.labelFontSize = 9,
+    this.labelFormat = 'MM/yy',
+    super.key,
+  });
 
   final List<MapEntry<DateTime, double>> entries;
   final double labelFontSize;
+
+  /// DateFormat pattern for the x-axis labels; period reports pass a
+  /// daily or monthly pattern depending on the bucket size.
+  final String labelFormat;
 
   @override
   Widget build(BuildContext context) {
@@ -389,7 +455,7 @@ class MonthlyLineChart extends StatelessWidget {
                 return SideTitleWidget(
                   meta: meta,
                   child: Text(
-                    DateFormat('MM/yy').format(entries[index].key),
+                    DateFormat(labelFormat).format(entries[index].key),
                     style: TextStyle(fontSize: labelFontSize),
                   ),
                 );
@@ -418,9 +484,9 @@ class MonthlyLineChart extends StatelessWidget {
   }
 }
 
-class ShopPieChart extends StatelessWidget {
-  const ShopPieChart({
-    required this.shops,
+class LabeledPieChart extends StatelessWidget {
+  const LabeledPieChart({
+    required this.slices,
     required this.total,
     required this.colors,
     this.size = 190,
@@ -428,7 +494,8 @@ class ShopPieChart extends StatelessWidget {
     super.key,
   });
 
-  final List<Shop> shops;
+  /// Slices already ordered by value (or any desired display order).
+  final List<PieSlice> slices;
   final double total;
   final List<Color> colors;
   final double size;
@@ -444,10 +511,12 @@ class ShopPieChart extends StatelessWidget {
           centerSpaceRadius: centerRadius,
           sectionsSpace: 2,
           sections: [
-            for (var index = 0; index < shops.length; index++)
+            for (var index = 0; index < slices.length; index++)
               PieChartSectionData(
-                value: shops[index].totalAmount,
-                title: total == 0 ? '0%' : '${(shops[index].totalAmount / total * 100).round()}%',
+                value: slices[index].value,
+                title: total == 0
+                    ? '0%'
+                    : '${(slices[index].value / total * 100).round()}%',
                 color: colors[index % colors.length],
                 radius: (size - centerRadius) / 2 - 2,
                 titleStyle: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white),
@@ -459,15 +528,16 @@ class ShopPieChart extends StatelessWidget {
   }
 }
 
-class _PieLegend extends StatelessWidget {
-  const _PieLegend({
-    required this.shops,
+class PieLegend extends StatelessWidget {
+  const PieLegend({
+    required this.slices,
     required this.total,
     required this.colors,
     this.showAmounts = false,
+    super.key,
   });
 
-  final List<Shop> shops;
+  final List<PieSlice> slices;
   final double total;
   final List<Color> colors;
   final bool showAmounts;
@@ -478,23 +548,23 @@ class _PieLegend extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          for (var index = 0; index < shops.length; index++)
+          for (var index = 0; index < slices.length; index++)
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: Row(
                 children: [
                   Container(width: 10, height: 10, decoration: BoxDecoration(color: colors[index % colors.length], shape: BoxShape.circle)),
                   const SizedBox(width: 7),
-                  Expanded(child: Text(shops[index].name, maxLines: 1, overflow: TextOverflow.ellipsis)),
+                  Expanded(child: Text(slices[index].label, maxLines: 1, overflow: TextOverflow.ellipsis)),
                   if (showAmounts) ...[
                     const SizedBox(width: 8),
                     Text(
-                      total == 0 ? '0%' : '${(shops[index].totalAmount / total * 100).round()}%',
+                      total == 0 ? '0%' : '${(slices[index].value / total * 100).round()}%',
                       style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
                     ),
                     const SizedBox(width: 10),
                     SarAmount(
-                      amount: shops[index].totalAmount,
+                      amount: slices[index].value,
                       style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
                       symbolSize: 11,
                     ),
@@ -508,12 +578,13 @@ class _PieLegend extends StatelessWidget {
   }
 }
 
-class _Metric extends StatelessWidget {
-  const _Metric({
+class MetricCard extends StatelessWidget {
+  const MetricCard({
     required this.label,
     this.value,
     this.amount,
     required this.icon,
+    super.key,
   });
 
   final String label;
@@ -552,24 +623,38 @@ class _Metric extends StatelessWidget {
       );
 }
 
-class _ShopProgress extends StatelessWidget {
-  const _ShopProgress({required this.shop, required this.total});
+/// A label + amount row with a share bar, used for the per-shop summary
+/// and the per-payment-method breakdown in the period reports.
+class ShareProgress extends StatelessWidget {
+  const ShareProgress({
+    required this.label,
+    required this.amount,
+    required this.total,
+    this.icon,
+    super.key,
+  });
 
-  final Shop shop;
+  final String label;
+  final double amount;
   final double total;
+  final IconData? icon;
 
   @override
   Widget build(BuildContext context) {
-    final ratio = total == 0 ? 0.0 : (shop.totalAmount / total).clamp(0.0, 1.0);
+    final ratio = total == 0 ? 0.0 : (amount / total).clamp(0.0, 1.0);
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: Column(
         children: [
           Row(
             children: [
-              Expanded(child: Text(shop.name, maxLines: 1, overflow: TextOverflow.ellipsis)),
+              if (icon != null) ...[
+                Icon(icon, size: 18, color: Theme.of(context).colorScheme.primary),
+                const SizedBox(width: 8),
+              ],
+              Expanded(child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis)),
               SarAmount(
-                amount: shop.totalAmount,
+                amount: amount,
                 style: const TextStyle(fontWeight: FontWeight.w700),
                 symbolSize: 12,
               ),
